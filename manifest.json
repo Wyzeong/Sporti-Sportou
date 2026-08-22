@@ -1,6 +1,6 @@
 {
-  "name": "SportApp",
-  "short_name": "SportApp",
+  "name": "Sporti-Sportou",
+  "short_name": "Sporti-Sportou",
   "description": "Planifie et suis tes séances de sport, entièrement hors ligne.",
   "start_url": "./index.html",
   "scope": "./",

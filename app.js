@@ -1,6 +1,6 @@
 /* app.js — logique de l'appli, vanilla JS, aucune dépendance */
 
-const APP_VERSION = '0.2.0';
+const APP_VERSION = '0.3.0';
 
 const MOTIVATION_QUOTES = [
   "Encore une série, encore un pas.",
@@ -442,7 +442,7 @@ function renderExercisesList() {
 
     $(`[data-field="name"]`, card).addEventListener('input', (e) => { ex.name = e.target.value; });
 
-    $(`[data-field="count"]`, card).addEventListener('input', (e) => {
+    $(`[data-field="count"]`, card).addEventListener('change', (e) => {
       let n = Math.max(1, Number(e.target.value) || 1);
       const lastWeight = ex.sets.length ? ex.sets[ex.sets.length - 1].weight : 20;
       while (ex.sets.length < n) ex.sets.push({ weight: lastWeight });
@@ -569,13 +569,21 @@ $('#btn-serie-terminee').addEventListener('click', () => {
     s.currentSetIndex += 1;
     persistActiveSession();
     const nextWeight = cur.sets[s.currentSetIndex].weight;
-    startRest('sets', s.restBetweenSets, `Ensuite : série ${s.currentSetIndex + 1} — ${fmtWeight(nextWeight)} kg`);
+    startRest(s.restBetweenSets, {
+      kind: 'sets',
+      title: `Ensuite : série ${s.currentSetIndex + 1}`,
+      sets: [{ label: `Série ${s.currentSetIndex + 1}`, weight: nextWeight }],
+    });
   } else if (s.currentExerciseIndex + 1 < s.exercises.length) {
     s.currentExerciseIndex += 1;
     s.currentSetIndex = 0;
     persistActiveSession();
-    const nextName = s.exercises[s.currentExerciseIndex].name;
-    startRest('exercises', s.restBetweenExercises, `Ensuite : ${nextName}`);
+    const nextEx = s.exercises[s.currentExerciseIndex];
+    startRest(s.restBetweenExercises, {
+      kind: 'exercises',
+      title: `Ensuite : ${nextEx.name}`,
+      sets: nextEx.sets.map((st, i) => ({ label: `Série ${i + 1}`, weight: st.weight })),
+    });
   } else {
     finishWorkout();
   }
@@ -607,6 +615,11 @@ async function quitWorkout() {
 }
 $('#btn-quit-workout').addEventListener('click', quitWorkout);
 $('#btn-quit-workout-rest').addEventListener('click', quitWorkout);
+$('#btn-skip-rest').addEventListener('click', () => {
+  stopRestTimer();
+  $('#rest-screen').style.display = 'none';
+  renderWorkout();
+});
 
 /* ===================== ÉCRAN DE REPOS (automatique, avec sons) ===================== */
 const RING_CIRC = 2 * Math.PI * 98;
@@ -619,12 +632,15 @@ function pickQuote() {
   return MOTIVATION_QUOTES[idx];
 }
 
-function startRest(kind, seconds, nextLabel) {
+function startRest(seconds, preview) {
   stopRestTimer();
   state.restTotal = seconds;
   state.restRemaining = seconds;
-  $('#rest-eyebrow-label').textContent = kind === 'exercises' ? 'REPOS AVANT LE PROCHAIN EXERCICE' : 'RÉCUPÉRATION ENTRE SÉRIES';
-  $('#rest-next').textContent = nextLabel || '';
+  $('#rest-eyebrow-label').textContent = preview.kind === 'exercises' ? 'REPOS AVANT LE PROCHAIN EXERCICE' : 'RÉCUPÉRATION ENTRE SÉRIES';
+
+  const setsHtml = preview.sets.map(s => `<div class="row"><span class="n">${escapeHtml(s.label)}</span><span>${fmtWeight(s.weight)} kg</span></div>`).join('');
+  $('#rest-next').innerHTML = `<div class="next-title">${escapeHtml(preview.title)}</div><div class="rest-next-sets">${setsHtml}</div>`;
+
   $('#rest-quote').textContent = pickQuote();
   $('#rest-screen').style.display = 'flex';
   updateRestUI();

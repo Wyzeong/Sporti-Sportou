@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
-<title>SportApp</title>
+<title>Sporti-Sportou</title>
 
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#14161a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="SportApp">
+<meta name="apple-mobile-web-app-title" content="Sporti-Sportou">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
 <link rel="stylesheet" href="style.css">
@@ -19,21 +19,28 @@
 
   <!-- ===================== HOME ===================== -->
   <section id="view-home" class="view active">
-    <div class="topbar"><h1>SportApp</h1></div>
+    <div class="topbar"><h1>Sporti-Sportou</h1></div>
     <p class="home-tagline">Planifie, ajuste, transpire.</p>
     <div class="home-body">
-      <button class="home-btn primary" data-nav="calendar">
+      <button class="home-btn primary" data-nav="seances">
+        <span class="glyph">🏋️</span>
+        <span>
+          <span class="label">Séances</span>
+          <span class="sub">Démarrer une séance existante</span>
+        </span>
+      </button>
+      <button class="home-btn" data-nav="calendar">
         <span class="glyph">📅</span>
         <span>
           <span class="label">Calendrier</span>
           <span class="sub">Voir et planifier ta semaine</span>
         </span>
       </button>
-      <button class="home-btn" data-nav="seances">
-        <span class="glyph">🏋️</span>
+      <button class="home-btn" data-nav="performance">
+        <span class="glyph">📈</span>
         <span>
-          <span class="label">Séances</span>
-          <span class="sub">Démarrer une séance existante</span>
+          <span class="label">Performance</span>
+          <span class="sub">Suivre ta progression</span>
         </span>
       </button>
       <button class="home-btn" data-nav="parametres">
@@ -69,6 +76,15 @@
       <h1>Séances</h1>
     </div>
     <div class="list" id="seances-list"></div>
+  </section>
+
+  <!-- ===================== PERFORMANCE (à venir) ===================== -->
+  <section id="view-performance" class="view">
+    <div class="topbar">
+      <button class="icon-btn back-link" data-nav="home">←</button>
+      <h1>Performance</h1>
+    </div>
+    <div class="empty-state"><span class="big">📈</span>Les graphiques de progression par exercice arrivent bientôt.</div>
   </section>
 
   <!-- Détail d'une séance : démarrer / modifier -->
@@ -169,6 +185,7 @@
   </div>
   <div class="rest-next" id="rest-next"></div>
   <div class="rest-quote" id="rest-quote"></div>
+  <button class="btn ghost" id="btn-skip-rest">Reprendre</button>
   <div class="wk-quit" id="btn-quit-workout-rest">Abandonner la séance</div>
 </div>
 
