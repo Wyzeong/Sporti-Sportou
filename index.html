@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<title>SportApp</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#14161a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SportApp">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- ===================== HOME ===================== -->
+  <section id="view-home" class="view active">
+    <div class="topbar"><h1>SportApp</h1></div>
+    <p class="home-tagline">Planifie, ajuste, transpire.</p>
+    <div class="home-body">
+      <button class="home-btn primary" data-nav="calendar">
+        <span class="glyph">📅</span>
+        <span>
+          <span class="label">Calendrier</span>
+          <span class="sub">Voir et planifier ta semaine</span>
+        </span>
+      </button>
+      <button class="home-btn" data-nav="seances">
+        <span class="glyph">🏋️</span>
+        <span>
+          <span class="label">Séances</span>
+          <span class="sub">Démarrer une séance existante</span>
+        </span>
+      </button>
+      <button class="home-btn" data-nav="parametres">
+        <span class="glyph">⚙️</span>
+        <span>
+          <span class="label">Paramètres</span>
+          <span class="sub">Créer et modifier tes séances</span>
+        </span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ===================== CALENDRIER ===================== -->
+  <section id="view-calendar" class="view">
+    <div class="topbar">
+      <button class="icon-btn back-link" data-nav="home">←</button>
+      <h1>Calendrier</h1>
+    </div>
+    <div class="cal-nav">
+      <button class="icon-btn cal-arrow" id="cal-prev">‹</button>
+      <div class="week-label" id="cal-week-label"></div>
+      <button class="icon-btn cal-arrow" id="cal-next">›</button>
+    </div>
+    <div class="week-grid" id="cal-day-heads"></div>
+    <div class="week-grid" id="cal-grid" style="margin-top:2px;"></div>
+    <div class="day-detail" id="day-detail" style="display:none;"></div>
+  </section>
+
+  <!-- ===================== SÉANCES (choix + démarrer/modifier) ===================== -->
+  <section id="view-seances" class="view">
+    <div class="topbar">
+      <button class="icon-btn back-link" data-nav="home">←</button>
+      <h1>Séances</h1>
+    </div>
+    <div class="list" id="seances-list"></div>
+  </section>
+
+  <!-- Détail d'une séance : démarrer / modifier -->
+  <section id="view-seance-detail" class="view">
+    <div class="topbar">
+      <button class="icon-btn back-link" id="seance-detail-back">←</button>
+      <h1 id="seance-detail-title">Séance</h1>
+    </div>
+    <div class="list" id="seance-detail-body"></div>
+    <div class="detail-actions">
+      <button class="btn ghost" id="btn-modifier-seance">Modifier</button>
+      <button class="btn primary" id="btn-demarrer-seance">Démarrer</button>
+    </div>
+  </section>
+
+  <!-- ===================== PARAMÈTRES ===================== -->
+  <section id="view-parametres" class="view">
+    <div class="topbar">
+      <button class="icon-btn back-link" data-nav="home">←</button>
+      <h1>Paramètres</h1>
+    </div>
+    <div class="settings-section">
+      <h3>Mes séances</h3>
+      <div id="param-templates-list"></div>
+      <button class="add-exercise-btn" id="btn-new-template" style="margin:14px 0 0;">+ Nouvelle séance</button>
+    </div>
+    <div class="settings-section">
+      <h3>À propos</h3>
+      <div class="settings-row">
+        <span class="k">Version</span>
+        <span class="v" id="app-version">0.1.0</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Édition d'un template -->
+  <section id="view-template-edit" class="view">
+    <div class="topbar">
+      <button class="icon-btn back-link" id="template-edit-back">←</button>
+      <h1>Modifier</h1>
+    </div>
+    <div class="field">
+      <label>Nom de la séance</label>
+      <input type="text" id="tpl-name" placeholder="Ex. Push day">
+    </div>
+    <div class="field" style="padding-top:4px;">
+      <label>Repos entre les séries (secondes)</label>
+      <input type="number" id="tpl-rest" inputmode="numeric" placeholder="90">
+    </div>
+    <div id="tpl-exercises-list" style="margin-top:8px;"></div>
+    <button class="add-exercise-btn" id="btn-add-exercise">+ Ajouter un exercice</button>
+    <div class="detail-actions">
+      <button class="btn danger" id="btn-delete-template">Supprimer</button>
+      <button class="btn primary" id="btn-save-template">Enregistrer</button>
+    </div>
+  </section>
+
+  <!-- ===================== SÉANCE ACTIVE ===================== -->
+  <section id="view-workout" class="view">
+    <div class="wk-top">
+      <span class="eyebrow" id="wk-eyebrow">SÉANCE EN COURS</span>
+      <div class="wk-title" id="wk-title">—</div>
+    </div>
+    <div class="wk-strip" id="wk-strip"></div>
+    <div class="wk-main">
+      <div class="wk-exname" id="wk-exname">—</div>
+      <div class="wk-sets-remaining" id="wk-sets-remaining">—</div>
+      <div class="stat-row">
+        <div class="stat-box editable" id="stat-reps">
+          <div class="stepper">
+            <button data-adjust="reps" data-delta="-1">−</button>
+            <div class="val" id="wk-reps-val">—</div>
+            <button data-adjust="reps" data-delta="1">+</button>
+          </div>
+          <div class="lbl">Répétitions</div>
+        </div>
+        <div class="stat-box editable" id="stat-weight">
+          <div class="stepper">
+            <button data-adjust="weight" data-delta="-2.5">−</button>
+            <div class="val" id="wk-weight-val">—</div>
+            <button data-adjust="weight" data-delta="2.5">+</button>
+          </div>
+          <div class="lbl">Poids (kg)</div>
+        </div>
+      </div>
+    </div>
+    <div class="wk-bottom">
+      <button class="btn primary" id="btn-serie-terminee" style="width:100%;">Série terminée</button>
+      <button class="btn primary" id="btn-prochain-exercice" style="width:100%; display:none;">Prochain exercice</button>
+      <div class="wk-quit" id="btn-quit-workout">Quitter la séance</div>
+    </div>
+  </section>
+
+</div>
+
+<!-- Écran de repos (overlay plein écran) -->
+<div class="rest-screen" id="rest-screen" style="display:none;">
+  <span class="eyebrow rest-eyebrow">RÉCUPÉRATION</span>
+  <div class="rest-ring-wrap">
+    <svg width="220" height="220" viewBox="0 0 220 220">
+      <circle class="ring-bg" cx="110" cy="110" r="98"></circle>
+      <circle class="ring-fg" id="rest-ring-fg" cx="110" cy="110" r="98"></circle>
+    </svg>
+    <div class="rest-time" id="rest-time">60</div>
+  </div>
+  <div class="rest-quote" id="rest-quote"></div>
+  <div class="rest-controls">
+    <button class="btn ghost" id="btn-skip-rest">Reprendre</button>
+    <button class="btn primary" id="btn-add-rest">+15s</button>
+  </div>
+</div>
+
+<!-- Modale : choisir des séances à planifier sur une date -->
+<div class="modal-overlay hidden" id="modal-add-session">
+  <div class="modal-sheet">
+    <div class="modal-grip"></div>
+    <h3>Ajouter une séance ce jour</h3>
+    <div class="chip-list" id="modal-templates-chips"></div>
+    <div class="detail-actions" style="padding:20px 0 0;">
+      <button class="btn ghost" id="modal-add-session-cancel">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<script src="db.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
