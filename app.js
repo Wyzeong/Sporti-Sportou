@@ -1,6 +1,6 @@
 /* app.js — logique de l'appli, vanilla JS, aucune dépendance */
 
-const APP_VERSION = '0.8.0';
+const APP_VERSION = '0.9.0';
 
 const MOTIVATION_QUOTES = [
   "Encore une série, encore un pas.",
@@ -41,6 +41,7 @@ const state = {
   restTimer: null,
   restTotal: 0,
   restRemaining: 0,
+  countdownSoundPlayed: false,
   lastQuoteIndex: -1,
   perfExercise: null,
   perfRange: '6m',
@@ -172,8 +173,17 @@ document.addEventListener('DOMContentLoaded', init);
 //   sounds/victory.mp3  -> joué à la fin d'une séance réussie
 // Format recommandé : .mp3 (le plus fiable sur iOS Safari).
 
+/* ===================== SON ===================== */
+// Deux vrais fichiers audio à déposer dans /sounds/ à la racine du projet,
+// à côté d'index.html, avec exactement ces noms :
+//   sounds/countdown.mp3 -> démarre quand le repos atteint 4 secondes restantes,
+//                           joue jusqu'à sa fin (couvre le décompte ET la reprise)
+//   sounds/victory.mp3   -> joué à la fin d'une séance réussie
+// Format recommandé : .mp3 (le plus fiable sur iOS Safari).
+
 let audioCtx = null;
 let victoryAudio = null;
+let countdownAudio = null;
 
 function ensureAudio() {
   try {
@@ -184,32 +194,27 @@ function ensureAudio() {
   if (!victoryAudio) {
     victoryAudio = new Audio('sounds/victory.mp3');
     victoryAudio.preload = 'auto';
-    // débloque la lecture du fichier sur iOS : doit être appelé pendant un geste utilisateur
     victoryAudio.play().then(() => victoryAudio.pause()).catch(() => {});
     victoryAudio.currentTime = 0;
   }
+  if (!countdownAudio) {
+    countdownAudio = new Audio('sounds/countdown.mp3');
+    countdownAudio.preload = 'auto';
+    // débloque la lecture des fichiers sur iOS : doit être appelé pendant un geste utilisateur
+    countdownAudio.play().then(() => countdownAudio.pause()).catch(() => {});
+    countdownAudio.currentTime = 0;
+  }
 }
-
-function beep(freq, duration, when = 0, volume = 0.35) {
-  if (!audioCtx) return;
-  const t0 = audioCtx.currentTime + when;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(freq, t0);
-  gain.gain.setValueAtTime(0, t0);
-  gain.gain.linearRampToValueAtTime(volume, t0 + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
-  osc.connect(gain).connect(audioCtx.destination);
-  osc.start(t0);
-  osc.stop(t0 + duration + 0.02);
-}
-function playTick() { beep(880, 0.09, 0, 0.3); }
-function playGo() { beep(700, 0.14, 0); beep(1050, 0.22, 0.13, 0.4); }
 
 function playVictoryFanfare() {
   if (!victoryAudio) return;
   const node = victoryAudio.cloneNode();
+  node.play().catch(() => { /* fichier absent ou lecture bloquée : on ignore silencieusement */ });
+}
+
+function playCountdownSound() {
+  if (!countdownAudio) return;
+  const node = countdownAudio.cloneNode();
   node.play().catch(() => { /* fichier absent ou lecture bloquée : on ignore silencieusement */ });
 }
 
@@ -783,6 +788,7 @@ function startRest(seconds, preview) {
   stopRestTimer();
   state.restTotal = seconds;
   state.restRemaining = seconds;
+  state.countdownSoundPlayed = false;
   $('#rest-eyebrow-label').textContent = preview.kind === 'exercises' ? 'REPOS AVANT LE PROCHAIN EXERCICE' : 'RÉCUPÉRATION ENTRE SÉRIES';
 
   const setsHtml = preview.sets.map((s, i) => `<div class="row${i === 0 ? ' is-next' : ''}"><span class="n">${escapeHtml(s.label)}</span><span>${fmtWeight(s.weight)} kg</span></div>`).join('');
@@ -792,12 +798,17 @@ function startRest(seconds, preview) {
   $('#rest-screen').style.display = 'flex';
   updateRestUI();
 
+  // si le repos est déjà de 4s ou moins, le son démarre tout de suite
+  if (state.restRemaining <= 4) {
+    playCountdownSound();
+    state.countdownSoundPlayed = true;
+  }
+
   state.restTimer = setInterval(() => {
     state.restRemaining -= 1;
     if (state.restRemaining <= 0) {
       state.restRemaining = 0;
       updateRestUI();
-      playGo();
       stopRestTimer();
       setTimeout(() => {
         $('#rest-screen').style.display = 'none';
@@ -805,7 +816,10 @@ function startRest(seconds, preview) {
       }, 550);
       return;
     }
-    if (state.restRemaining <= 5) playTick();
+    if (state.restRemaining === 4 && !state.countdownSoundPlayed) {
+      playCountdownSound();
+      state.countdownSoundPlayed = true;
+    }
     updateRestUI();
   }, 1000);
 }
