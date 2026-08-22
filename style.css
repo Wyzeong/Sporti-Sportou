@@ -279,9 +279,21 @@ input, select{
 .btn[disabled]{ opacity:0.4; }
 
 /* ===== Édition de template ===== */
-.field{ padding: 10px 16px; }
+.field{ padding: 10px 16px; flex:1; }
 .field label{ display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;}
 .field input{ width:100%; }
+.field-row{ display:flex; }
+.field-row .field{ padding: 10px 8px; }
+.field-row .field:first-child{ padding-left:16px; }
+.field-row .field:last-child{ padding-right:16px; }
+input[type="color"]{
+  padding: 3px; height:42px; cursor:pointer;
+}
+
+.color-dot{
+  width:10px; height:10px; border-radius:50%;
+  display:inline-block; margin-right:8px; flex-shrink:0;
+}
 
 .exercise-card{
   background: var(--surface);
@@ -292,15 +304,24 @@ input, select{
 }
 .exercise-card .row-top{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
 .exercise-card input.ex-name{ font-weight:700; font-size:15px; background:transparent; border:none; padding:0; flex:1; }
-.exercise-grid{
-  display:grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap:8px;
+.remove-ex{ color: var(--danger); font-size:20px; padding:4px 8px; }
+
+.ex-sets-count{
+  display:flex; align-items:center; gap:10px;
   margin-top:10px;
 }
-.exercise-grid .cell label{ font-size:10px; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:4px; }
-.exercise-grid input{ width:100%; padding:8px; text-align:center; }
-.remove-ex{ color: var(--danger); font-size:20px; padding:4px 8px; }
+.ex-sets-count label{ font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; }
+.ex-sets-count input{ width:64px; padding:8px; text-align:center; }
+
+.set-weight-rows{ margin-top:10px; display:flex; flex-direction:column; gap:6px; }
+.set-weight-row{
+  display:flex; align-items:center; justify-content:space-between;
+  background: var(--surface-alt);
+  border-radius: var(--radius-s);
+  padding: 8px 10px;
+}
+.set-weight-row .lbl{ font-size:13px; color:var(--text-muted); }
+.set-weight-row input{ width:84px; padding:6px 8px; text-align:center; }
 
 .add-exercise-btn{
   margin: 8px 16px 20px;
@@ -348,34 +369,39 @@ input, select{
   text-align:center;
   gap: 6px;
 }
-.wk-exname{ font-size:30px; font-weight:800; letter-spacing:-0.5px; }
-.wk-sets-remaining{ color: var(--accent); font-weight:700; font-size:16px; margin-top:6px; }
-
-.stat-row{
-  display:flex;
-  gap:14px;
-  margin-top: 26px;
-}
-.stat-box{
-  background: var(--surface);
-  border:1px solid var(--line);
-  border-radius: var(--radius-m);
-  padding: 16px 22px;
-  min-width:96px;
-}
-.stat-box .val{ font-size:26px; font-weight:800; }
-.stat-box .lbl{ font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; }
-.stat-box.editable{ position:relative; }
-.stepper{
-  display:flex; align-items:center; gap:10px; margin-top:4px;
-}
-.stepper button{
-  width:28px;height:28px;border-radius:50%;
-  background: var(--surface-alt);
+.wk-exname{ font-size:28px; font-weight:800; letter-spacing:-0.5px; }
+.wk-sets-remaining{ color: var(--accent); font-weight:700; font-size:15px; margin-top:4px; }
+.wk-weight-display{
+  font-size:56px;
   font-weight:800;
-  display:flex;align-items:center;justify-content:center;
+  margin-top: 22px;
+  letter-spacing: -1px;
 }
-.stepper .val{ min-width: 40px; text-align:center; }
+
+/* ---- bandeau des séries de l'exercice en cours ---- */
+.sets-banner{
+  display:flex;
+  gap:8px;
+  overflow-x:auto;
+  padding: 0 16px 10px;
+}
+.sets-banner::-webkit-scrollbar{ display:none; }
+.set-row-chip{
+  flex-shrink:0;
+  display:flex; flex-direction:column; align-items:center;
+  gap:2px;
+  padding: 8px 14px;
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  min-width:64px;
+}
+.set-row-chip .n{ font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.4px; }
+.set-row-chip .w{ font-size:14px; font-weight:700; }
+.set-row-chip.current{ border: 2px solid var(--accent); background: var(--surface-raised); }
+.set-row-chip.current .w{ color: var(--accent); }
+.set-row-chip.done{ opacity:0.4; }
+.set-row-chip.done .w{ text-decoration: line-through; }
 
 .wk-bottom{
   padding: 14px 20px calc(20px + env(safe-area-inset-bottom));
@@ -413,7 +439,13 @@ input, select{
   min-height: 48px;
 }
 .rest-eyebrow{ color: var(--rest); }
-.rest-controls{ display:flex; gap:12px; margin-top:6px; }
+.rest-next{
+  font-size:13px;
+  color: var(--text-muted);
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+}
+.rest-screen .wk-quit{ margin-top: 4px; }
 
 /* ===== Modale générique ===== */
 .modal-overlay{

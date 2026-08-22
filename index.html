@@ -114,9 +114,19 @@
       <label>Nom de la séance</label>
       <input type="text" id="tpl-name" placeholder="Ex. Push day">
     </div>
-    <div class="field" style="padding-top:4px;">
-      <label>Repos entre les séries (secondes)</label>
-      <input type="number" id="tpl-rest" inputmode="numeric" placeholder="90">
+    <div class="field-row">
+      <div class="field">
+        <label>Couleur</label>
+        <input type="color" id="tpl-color" value="#c8f14d">
+      </div>
+      <div class="field">
+        <label>Repos / séries (s)</label>
+        <input type="number" id="tpl-rest-sets" inputmode="numeric" placeholder="90">
+      </div>
+      <div class="field">
+        <label>Repos / exercices (s)</label>
+        <input type="number" id="tpl-rest-exercises" inputmode="numeric" placeholder="120">
+      </div>
     </div>
     <div id="tpl-exercises-list" style="margin-top:8px;"></div>
     <button class="add-exercise-btn" id="btn-add-exercise">+ Ajouter un exercice</button>
@@ -133,40 +143,23 @@
       <div class="wk-title" id="wk-title">—</div>
     </div>
     <div class="wk-strip" id="wk-strip"></div>
+    <div class="sets-banner" id="sets-banner"></div>
     <div class="wk-main">
       <div class="wk-exname" id="wk-exname">—</div>
       <div class="wk-sets-remaining" id="wk-sets-remaining">—</div>
-      <div class="stat-row">
-        <div class="stat-box editable" id="stat-reps">
-          <div class="stepper">
-            <button data-adjust="reps" data-delta="-1">−</button>
-            <div class="val" id="wk-reps-val">—</div>
-            <button data-adjust="reps" data-delta="1">+</button>
-          </div>
-          <div class="lbl">Répétitions</div>
-        </div>
-        <div class="stat-box editable" id="stat-weight">
-          <div class="stepper">
-            <button data-adjust="weight" data-delta="-2.5">−</button>
-            <div class="val" id="wk-weight-val">—</div>
-            <button data-adjust="weight" data-delta="2.5">+</button>
-          </div>
-          <div class="lbl">Poids (kg)</div>
-        </div>
-      </div>
+      <div class="wk-weight-display" id="wk-weight-display">— kg</div>
     </div>
     <div class="wk-bottom">
       <button class="btn primary" id="btn-serie-terminee" style="width:100%;">Série terminée</button>
-      <button class="btn primary" id="btn-prochain-exercice" style="width:100%; display:none;">Prochain exercice</button>
       <div class="wk-quit" id="btn-quit-workout">Quitter la séance</div>
     </div>
   </section>
 
 </div>
 
-<!-- Écran de repos (overlay plein écran) -->
+<!-- Écran de repos (overlay plein écran, automatique) -->
 <div class="rest-screen" id="rest-screen" style="display:none;">
-  <span class="eyebrow rest-eyebrow">RÉCUPÉRATION</span>
+  <span class="eyebrow rest-eyebrow" id="rest-eyebrow-label">RÉCUPÉRATION</span>
   <div class="rest-ring-wrap">
     <svg width="220" height="220" viewBox="0 0 220 220">
       <circle class="ring-bg" cx="110" cy="110" r="98"></circle>
@@ -174,11 +167,9 @@
     </svg>
     <div class="rest-time" id="rest-time">60</div>
   </div>
+  <div class="rest-next" id="rest-next"></div>
   <div class="rest-quote" id="rest-quote"></div>
-  <div class="rest-controls">
-    <button class="btn ghost" id="btn-skip-rest">Reprendre</button>
-    <button class="btn primary" id="btn-add-rest">+15s</button>
-  </div>
+  <div class="wk-quit" id="btn-quit-workout-rest">Abandonner la séance</div>
 </div>
 
 <!-- Modale : choisir des séances à planifier sur une date -->
