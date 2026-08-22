@@ -1,7 +1,7 @@
 /* db.js — couche d'accès IndexedDB, sans dépendance externe */
 
 const DB_NAME = 'sport-app-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise = null;
 
@@ -24,6 +24,12 @@ function openDB() {
       if (!db.objectStoreNames.contains('kv')) {
         // stockage clé/valeur générique : version, session active, etc.
         db.createObjectStore('kv', { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains('exerciseLogs')) {
+        // historique des poids par exercice, pour les graphiques de performance
+        const store = db.createObjectStore('exerciseLogs', { keyPath: 'id' });
+        store.createIndex('by_name', 'exerciseName', { unique: false });
+        store.createIndex('by_date', 'date', { unique: false });
       }
     };
 
@@ -81,6 +87,24 @@ const DB = {
   async deletePlanned(id) {
     const store = await tx('planned', 'readwrite');
     return wrapRequest(store.delete(id));
+  },
+  async getAllPlanned() {
+    const store = await tx('planned', 'readonly');
+    return wrapRequest(store.getAll());
+  },
+
+  // ---- historique de performance par exercice ----
+  async saveExerciseLog(log) {
+    const store = await tx('exerciseLogs', 'readwrite');
+    return wrapRequest(store.put(log));
+  },
+  async getAllExerciseLogs() {
+    const store = await tx('exerciseLogs', 'readonly');
+    return wrapRequest(store.getAll());
+  },
+  async getExerciseLogsByName(name) {
+    const all = await DB.getAllExerciseLogs();
+    return all.filter(l => l.exerciseName === name);
   },
 
   // ---- clé / valeur (version, session active) ----

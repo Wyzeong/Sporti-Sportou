@@ -1,6 +1,6 @@
 /* app.js — logique de l'appli, vanilla JS, aucune dépendance */
 
-const APP_VERSION = '0.3.0';
+const APP_VERSION = '0.5.0';
 
 const MOTIVATION_QUOTES = [
   "Encore une série, encore un pas.",
@@ -24,6 +24,7 @@ const MOTIVATION_QUOTES = [
 ];
 
 const COLOR_PALETTE = ['#c8f14d', '#3ec6b3', '#ff6b5c', '#5b8def', '#f2a93b', '#c77dff', '#4bd07d', '#ff8fb3'];
+const ICON_PALETTE = ['🏋️','🦵','🚣','💪','🏃','🤸','🧘','🔥','🎯','⚡'];
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $all = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -31,6 +32,8 @@ const $all = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const state = {
   templates: [],
   currentWeekStart: mondayOf(new Date()),
+  currentMonth: firstOfMonth(new Date()),
+  calendarMode: 'week',
   selectedDayKey: null,
   editingTemplate: null,
   templateEditReturnTo: 'parametres',
@@ -40,6 +43,8 @@ const state = {
   restTotal: 0,
   restRemaining: 0,
   lastQuoteIndex: -1,
+  perfExercise: null,
+  perfRange: '6m',
 };
 
 /* ===================== Utilitaires de date ===================== */
@@ -54,6 +59,8 @@ function mondayOf(d) {
   r.setHours(0, 0, 0, 0);
   return r;
 }
+function firstOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+function addMonths(d, n) { return new Date(d.getFullYear(), d.getMonth() + n, 1); }
 const MOIS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 function weekLabel(monday) {
   const sunday = addDays(monday, 6);
@@ -69,10 +76,26 @@ function fmtWeight(w) {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+function iconBadge(color, icon) {
+  return `<span class="icon-badge" style="background:${color}">${icon || '🏋️'}</span>`;
+}
+
+async function seedDefaultTemplatesIfNeeded() {
+  const seeded = await DB.getKV('seededDefaults');
+  if (seeded) return;
+  const defaults = [
+    { id: uid(), name: 'Legs', icon: '🦵', color: '#5b8def', restBetweenSets: 90, restBetweenExercises: 120, exercises: [] },
+    { id: uid(), name: 'Push', icon: '🏋️', color: '#ff6b5c', restBetweenSets: 90, restBetweenExercises: 120, exercises: [] },
+    { id: uid(), name: 'Pull', icon: '🚣', color: '#4bd07d', restBetweenSets: 90, restBetweenExercises: 120, exercises: [] },
+  ];
+  for (const t of defaults) await DB.saveTemplate(t);
+  await DB.setKV('seededDefaults', true);
+}
 
 /* ===================== Compatibilité des anciennes séances ===================== */
 function normalizeTemplate(t) {
   t.color = t.color || COLOR_PALETTE[state.templates.length % COLOR_PALETTE.length];
+  t.icon = t.icon || '🏋️';
   t.restBetweenSets = Number(t.restBetweenSets ?? t.restSeconds ?? 90);
   t.restBetweenExercises = Number(t.restBetweenExercises ?? 120);
   t.exercises = (t.exercises || []).map(ex => {
@@ -118,6 +141,7 @@ document.addEventListener('click', (e) => {
     if (target === 'calendar') { renderCalendar(); }
     if (target === 'seances') { renderSeancesList(); }
     if (target === 'parametres') { renderParametresList(); }
+    if (target === 'performance') { renderPerformance(); }
     showView(target);
   }
 });
@@ -130,6 +154,7 @@ async function init() {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
+  await seedDefaultTemplatesIfNeeded();
   await loadTemplates();
 
   const saved = await DB.getKV('activeSession');
@@ -175,14 +200,35 @@ function playGo() { beep(700, 0.14, 0); beep(1050, 0.22, 0.13, 0.4); }
 
 /* ===================== CALENDRIER ===================== */
 const JOURS = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+const MOIS_LONG = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
 function renderCalendarHeads() {
-  const wrap = $('#cal-day-heads');
-  wrap.innerHTML = JOURS.map(j => `<div class="day-head">${j}</div>`).join('');
+  ['#cal-day-heads', '#cal-month-day-heads'].forEach(sel => {
+    $(sel).innerHTML = JOURS.map(j => `<div class="day-head">${j}</div>`).join('');
+  });
 }
+
+$all('[data-calmode]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    state.calendarMode = btn.dataset.calmode;
+    $all('[data-calmode]').forEach(b => b.classList.toggle('active', b === btn));
+    $('#cal-week-view').style.display = state.calendarMode === 'week' ? 'block' : 'none';
+    $('#cal-month-view').style.display = state.calendarMode === 'month' ? 'block' : 'none';
+    $('#cal-history-view').style.display = state.calendarMode === 'history' ? 'block' : 'none';
+    state.selectedDayKey = null;
+    $('#day-detail').style.display = 'none';
+    renderCalendar();
+  });
+});
 
 async function renderCalendar() {
   renderCalendarHeads();
+  if (state.calendarMode === 'week') await renderCalendarWeek();
+  else if (state.calendarMode === 'month') await renderCalendarMonth();
+  else await renderCalendarHistory();
+}
+
+async function renderCalendarWeek() {
   $('#cal-week-label').textContent = weekLabel(state.currentWeekStart);
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(state.currentWeekStart, i));
@@ -213,16 +259,90 @@ async function renderCalendar() {
     });
   });
 
-  if (state.selectedDayKey && state.selectedDayKey >= startKey && state.selectedDayKey <= endKey) {
-    renderDayDetail();
-  } else {
-    state.selectedDayKey = null;
-    $('#day-detail').style.display = 'none';
-  }
+  if (state.selectedDayKey) renderDayDetail();
 }
 
-$('#cal-prev').addEventListener('click', () => { state.currentWeekStart = addDays(state.currentWeekStart, -7); renderCalendar(); });
-$('#cal-next').addEventListener('click', () => { state.currentWeekStart = addDays(state.currentWeekStart, 7); renderCalendar(); });
+$('#cal-prev').addEventListener('click', () => { state.currentWeekStart = addDays(state.currentWeekStart, -7); renderCalendarWeek(); });
+$('#cal-next').addEventListener('click', () => { state.currentWeekStart = addDays(state.currentWeekStart, 7); renderCalendarWeek(); });
+
+async function renderCalendarMonth() {
+  const monthStart = state.currentMonth;
+  $('#cal-month-label').textContent = `${MOIS_LONG[monthStart.getMonth()]} ${monthStart.getFullYear()}`;
+
+  const gridStart = mondayOf(monthStart);
+  const monthEndExclusive = addMonths(monthStart, 1);
+  // 6 lignes de 7 jours couvrent toujours un mois complet quel que soit le décalage
+  const cells = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
+
+  const rangeStartKey = dateKey(cells[0]);
+  const rangeEndKey = dateKey(cells[cells.length - 1]);
+  const planned = await DB.getPlannedForRange(rangeStartKey, rangeEndKey);
+  const byDay = {};
+  planned.forEach(p => { (byDay[p.date] = byDay[p.date] || []).push(p); });
+
+  const todayKey = dateKey(new Date());
+  const grid = $('#cal-month-grid');
+  grid.innerHTML = cells.map(d => {
+    const key = dateKey(d);
+    const isToday = key === todayKey;
+    const inMonth = d >= monthStart && d < monthEndExclusive;
+    const entries = (byDay[key] || []).filter(p => p.done);
+
+    if (entries.length > 0) {
+      const primary = entries[0];
+      const tpl = state.templates.find(t => t.id === primary.templateId);
+      const color = primary.color || (tpl ? tpl.color : '#8b8f98');
+      const icon = primary.icon || (tpl ? tpl.icon : '🏋️');
+      const extra = entries.length > 1 ? `<span class="month-day-extra">+${entries.length - 1}</span>` : '';
+      return `<button class="month-day has-activity${isToday ? ' today' : ''}" style="background:${color};" data-day="${key}">${icon}${extra}</button>`;
+    }
+    return `<button class="month-day${isToday ? ' today' : ''}${inMonth ? '' : ' out-month'}" data-day="${key}">${d.getDate()}</button>`;
+  }).join('');
+
+  $all('.month-day', grid).forEach(cell => {
+    cell.addEventListener('click', () => {
+      state.selectedDayKey = cell.dataset.day;
+      renderDayDetail();
+    });
+  });
+
+  if (state.selectedDayKey) renderDayDetail();
+}
+
+$('#cal-month-prev').addEventListener('click', () => { state.currentMonth = addMonths(state.currentMonth, -1); renderCalendarMonth(); });
+$('#cal-month-next').addEventListener('click', () => { state.currentMonth = addMonths(state.currentMonth, 1); renderCalendarMonth(); });
+
+async function renderCalendarHistory() {
+  const all = await DB.getAllPlanned();
+  const done = all.filter(p => p.done).sort((a, b) => b.date.localeCompare(a.date));
+  const wrap = $('#cal-history-view');
+
+  if (done.length === 0) {
+    wrap.innerHTML = `<div class="empty-state"><span class="big">🗓️</span>Aucune séance terminée pour l'instant.</div>`;
+    return;
+  }
+
+  let html = '';
+  let lastMonthKey = '';
+  done.forEach(p => {
+    const [y, m] = p.date.split('-').map(Number);
+    const monthKey = `${y}-${m}`;
+    if (monthKey !== lastMonthKey) {
+      html += `<div class="eyebrow" style="margin:16px 0 8px;">${MOIS_LONG[m - 1]} ${y}</div>`;
+      lastMonthKey = monthKey;
+    }
+    const tpl = state.templates.find(t => t.id === p.templateId);
+    const name = p.templateName || (tpl ? tpl.name : 'Séance supprimée');
+    const color = p.color || (tpl ? tpl.color : 'var(--text-muted)');
+    const icon = p.icon || (tpl ? tpl.icon : '🏋️');
+    const d = Number(p.date.split('-')[2]);
+    html += `<div class="list-item" style="display:flex; align-items:center; justify-content:space-between;">
+               <span style="display:flex; align-items:center;">${iconBadge(color, icon)}${escapeHtml(name)}</span>
+               <span class="meta">${d} ${MOIS[m - 1]}</span>
+             </div>`;
+  });
+  wrap.innerHTML = html;
+}
 
 function fmtDayDetailTitle(key) {
   const [y, m, d] = key.split('-').map(Number);
@@ -241,9 +361,10 @@ async function renderDayDetail() {
     const tpl = state.templates.find(t => t.id === p.templateId);
     const name = p.templateName || (tpl ? tpl.name : 'Séance supprimée');
     const color = p.color || (tpl ? tpl.color : 'var(--text-muted)');
+    const icon = p.icon || (tpl ? tpl.icon : '🏋️');
     const doneTag = p.done ? ' ✓' : '';
     return `<div class="planned-row" data-planned="${p.id}">
-              <span class="name"><span class="color-dot" style="background:${color}"></span>${escapeHtml(name)}${doneTag}</span>
+              <span class="name">${iconBadge(color, icon)}${escapeHtml(name)}${doneTag}</span>
               <span style="display:flex; gap:8px;">
                 ${tpl ? `<button class="small-btn go" data-start-planned="${p.id}">Démarrer</button>` : ''}
                 <button class="small-btn danger" data-remove-planned="${p.id}">Suppr.</button>
@@ -285,12 +406,12 @@ function openAddSessionModal() {
     chips.innerHTML = `<p style="color:var(--text-muted); font-size:14px;">Aucune séance créée. Va dans Paramètres pour en créer une.</p>`;
   } else {
     chips.innerHTML = state.templates.map(t =>
-      `<button class="chip" data-tpl="${t.id}"><span class="color-dot" style="background:${t.color}"></span>${escapeHtml(t.name)}</button>`
+      `<button class="chip" data-tpl="${t.id}">${iconBadge(t.color, t.icon)}${escapeHtml(t.name)}</button>`
     ).join('');
     $all('.chip', chips).forEach(chip => {
       chip.addEventListener('click', async () => {
         const tpl = state.templates.find(t => t.id === chip.dataset.tpl);
-        await DB.savePlanned({ id: uid(), date: state.selectedDayKey, templateId: tpl.id, templateName: tpl.name, color: tpl.color });
+        await DB.savePlanned({ id: uid(), date: state.selectedDayKey, templateId: tpl.id, templateName: tpl.name, color: tpl.color, icon: tpl.icon });
         modal.classList.add('hidden');
         toast('Séance ajoutée');
         renderDayDetail();
@@ -313,7 +434,7 @@ function renderSeancesList() {
     const nbEx = t.exercises.length;
     const nbSets = t.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
     return `<div class="list-item" data-tpl="${t.id}">
-              <div class="name"><span class="color-dot" style="background:${t.color}"></span>${escapeHtml(t.name)}</div>
+              <div class="name">${iconBadge(t.color, t.icon)}${escapeHtml(t.name)}</div>
               <div class="meta">${nbEx} exercice${nbEx > 1 ? 's' : ''} · ${nbSets} série${nbSets > 1 ? 's' : ''} au total</div>
             </div>`;
   }).join('');
@@ -329,7 +450,7 @@ function renderSeancesList() {
 function renderSeanceDetail() {
   const tpl = state.templates.find(t => t.id === state.seanceDetailId);
   if (!tpl) { showView('seances'); return; }
-  $('#seance-detail-title').innerHTML = `<span class="color-dot" style="background:${tpl.color}"></span>${escapeHtml(tpl.name)}`;
+  $('#seance-detail-title').innerHTML = `${iconBadge(tpl.color, tpl.icon)}${escapeHtml(tpl.name)}`;
   const body = $('#seance-detail-body');
   body.innerHTML = `
     <div class="list-item">
@@ -372,7 +493,7 @@ function renderParametresList() {
   }
   wrap.innerHTML = state.templates.map(t => `
     <div class="settings-row" data-tpl="${t.id}" style="cursor:pointer;">
-      <span class="k" style="color:var(--text); display:flex; align-items:center;"><span class="color-dot" style="background:${t.color}"></span>${escapeHtml(t.name)}</span>
+      <span class="k" style="color:var(--text); display:flex; align-items:center;">${iconBadge(t.color, t.icon)}${escapeHtml(t.name)}</span>
       <span class="v" style="color:var(--text-muted);">›</span>
     </div>
   `).join('');
@@ -392,6 +513,7 @@ $('#btn-new-template').addEventListener('click', () => {
     id: null,
     name: '',
     color: COLOR_PALETTE[state.templates.length % COLOR_PALETTE.length],
+    icon: ICON_PALETTE[state.templates.length % ICON_PALETTE.length],
     restBetweenSets: 90,
     restBetweenExercises: 120,
     exercises: [],
@@ -409,7 +531,22 @@ function renderTemplateEdit() {
   $('#tpl-rest-sets').value = t.restBetweenSets || 90;
   $('#tpl-rest-exercises').value = t.restBetweenExercises || 120;
   $('#btn-delete-template').style.display = t.id ? 'block' : 'none';
+  renderIconPicker();
   renderExercisesList();
+}
+
+function renderIconPicker() {
+  const t = state.editingTemplate;
+  const wrap = $('#tpl-icon-picker');
+  wrap.innerHTML = ICON_PALETTE.map(ic =>
+    `<button type="button" class="${ic === t.icon ? 'selected' : ''}" data-icon="${ic}">${ic}</button>`
+  ).join('');
+  $all('button', wrap).forEach(btn => {
+    btn.addEventListener('click', () => {
+      t.icon = btn.dataset.icon;
+      renderIconPicker();
+    });
+  });
 }
 
 function renderExercisesList() {
@@ -429,7 +566,12 @@ function renderExercisesList() {
         ${ex.sets.map((s, si) => `
           <div class="set-weight-row">
             <span class="lbl">Série ${si + 1}</span>
-            <input type="number" inputmode="decimal" step="0.5" data-set-idx="${si}" value="${s.weight}"> kg
+            <div class="weight-stepper">
+              <button type="button" data-w-minus="${si}">−</button>
+              <input type="number" inputmode="decimal" step="0.5" data-set-idx="${si}" value="${s.weight}">
+              <button type="button" data-w-plus="${si}">+</button>
+              <span class="unit">kg</span>
+            </div>
           </div>
         `).join('')}
       </div>
@@ -453,6 +595,20 @@ function renderExercisesList() {
     $all('[data-set-idx]', card).forEach(input => {
       input.addEventListener('input', () => {
         ex.sets[Number(input.dataset.setIdx)].weight = Number(input.value) || 0;
+      });
+    });
+    $all('[data-w-minus]', card).forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = Number(btn.dataset.wMinus);
+        ex.sets[i].weight = Math.max(0, Number(ex.sets[i].weight) - 1);
+        renderExercisesList();
+      });
+    });
+    $all('[data-w-plus]', card).forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = Number(btn.dataset.wPlus);
+        ex.sets[i].weight = Number(ex.sets[i].weight) + 1;
+        renderExercisesList();
       });
     });
   });
@@ -498,7 +654,7 @@ $('#btn-delete-template').addEventListener('click', async () => {
   if (!t.id) return;
   if (!confirm(`Supprimer « ${t.name} » ?`)) return;
   await DB.deleteTemplate(t.id);
-  const all = await DB.getPlannedForRange('0000-00-00', '9999-99-99');
+  const all = await DB.getAllPlanned();
   for (const p of all.filter(p => p.templateId === t.id)) await DB.deletePlanned(p.id);
   await loadTemplates();
   toast('Séance supprimée');
@@ -514,6 +670,7 @@ function startWorkout(template, plannedId) {
     templateId: template.id,
     templateName: template.name,
     color: template.color,
+    icon: template.icon,
     restBetweenSets: Number(template.restBetweenSets) || 90,
     restBetweenExercises: Number(template.restBetweenExercises) || 120,
     currentExerciseIndex: 0,
@@ -568,11 +725,14 @@ $('#btn-serie-terminee').addEventListener('click', () => {
   if (s.currentSetIndex + 1 < cur.sets.length) {
     s.currentSetIndex += 1;
     persistActiveSession();
-    const nextWeight = cur.sets[s.currentSetIndex].weight;
+    const remainingSets = cur.sets.slice(s.currentSetIndex).map((st, i) => ({
+      label: `Série ${s.currentSetIndex + 1 + i}`,
+      weight: st.weight,
+    }));
     startRest(s.restBetweenSets, {
       kind: 'sets',
-      title: `Ensuite : série ${s.currentSetIndex + 1}`,
-      sets: [{ label: `Série ${s.currentSetIndex + 1}`, weight: nextWeight }],
+      title: 'Séries restantes',
+      sets: remainingSets,
     });
   } else if (s.currentExerciseIndex + 1 < s.exercises.length) {
     s.currentExerciseIndex += 1;
@@ -593,11 +753,21 @@ async function finishWorkout() {
   const s = state.activeSession;
   const today = dateKey(new Date());
   if (s.plannedId) {
-    const list = await DB.getPlannedForRange('0000-00-00', '9999-99-99');
+    const list = await DB.getAllPlanned();
     const p = list.find(pp => pp.id === s.plannedId);
-    if (p) { p.done = true; p.color = s.color; p.templateName = s.templateName; await DB.savePlanned(p); }
+    if (p) { p.done = true; p.color = s.color; p.icon = s.icon; p.templateName = s.templateName; await DB.savePlanned(p); }
   } else {
-    await DB.savePlanned({ id: uid(), date: today, templateId: s.templateId, templateName: s.templateName, color: s.color, done: true });
+    await DB.savePlanned({ id: uid(), date: today, templateId: s.templateId, templateName: s.templateName, color: s.color, icon: s.icon, done: true });
+  }
+  for (const ex of s.exercises) {
+    const weights = ex.sets.map(st => Number(st.weight));
+    await DB.saveExerciseLog({
+      id: uid(),
+      date: today,
+      exerciseName: ex.name,
+      weights,
+      maxWeight: Math.max(...weights),
+    });
   }
   state.activeSession = null;
   await DB.deleteKV('activeSession');
@@ -638,7 +808,7 @@ function startRest(seconds, preview) {
   state.restRemaining = seconds;
   $('#rest-eyebrow-label').textContent = preview.kind === 'exercises' ? 'REPOS AVANT LE PROCHAIN EXERCICE' : 'RÉCUPÉRATION ENTRE SÉRIES';
 
-  const setsHtml = preview.sets.map(s => `<div class="row"><span class="n">${escapeHtml(s.label)}</span><span>${fmtWeight(s.weight)} kg</span></div>`).join('');
+  const setsHtml = preview.sets.map((s, i) => `<div class="row${i === 0 ? ' is-next' : ''}"><span class="n">${escapeHtml(s.label)}</span><span>${fmtWeight(s.weight)} kg</span></div>`).join('');
   $('#rest-next').innerHTML = `<div class="next-title">${escapeHtml(preview.title)}</div><div class="rest-next-sets">${setsHtml}</div>`;
 
   $('#rest-quote').textContent = pickQuote();
@@ -673,4 +843,143 @@ function updateRestUI() {
 
 function stopRestTimer() {
   if (state.restTimer) { clearInterval(state.restTimer); state.restTimer = null; }
+}
+
+/* ===================== PERFORMANCE ===================== */
+$all('[data-range]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    state.perfRange = btn.dataset.range;
+    $all('[data-range]').forEach(b => b.classList.toggle('active', b === btn));
+    drawPerformanceChart();
+  });
+});
+
+$('#perf-exercise-select').addEventListener('change', (e) => {
+  state.perfExercise = e.target.value || null;
+  drawPerformanceChart();
+});
+
+async function renderPerformance() {
+  const logs = await DB.getAllExerciseLogs();
+  const names = [...new Set(logs.map(l => l.exerciseName))].sort((a, b) => a.localeCompare(b));
+  const select = $('#perf-exercise-select');
+
+  if (names.length === 0) {
+    select.innerHTML = `<option value="">Aucun exercice enregistré</option>`;
+    state.perfExercise = null;
+    $('#perf-canvas').style.display = 'none';
+    $('#perf-empty').style.display = 'block';
+    return;
+  }
+
+  if (!state.perfExercise || !names.includes(state.perfExercise)) state.perfExercise = names[0];
+  select.innerHTML = names.map(n => `<option value="${escapeHtml(n)}" ${n === state.perfExercise ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('');
+
+  await drawPerformanceChart();
+}
+
+function rangeCutoffDate(range) {
+  const now = new Date();
+  if (range === 'all') return null;
+  const months = { '1m': 1, '3m': 3, '6m': 6, '1y': 12 }[range] || 6;
+  return addMonths(now, -months);
+}
+
+async function drawPerformanceChart() {
+  const canvas = $('#perf-canvas');
+  if (!state.perfExercise) {
+    canvas.style.display = 'none';
+    $('#perf-empty').style.display = 'block';
+    return;
+  }
+  const logs = await DB.getExerciseLogsByName(state.perfExercise);
+  const cutoff = rangeCutoffDate(state.perfRange);
+  const cutoffKey = cutoff ? dateKey(cutoff) : null;
+  const points = logs
+    .filter(l => !cutoffKey || l.date >= cutoffKey)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (points.length === 0) {
+    canvas.style.display = 'none';
+    $('#perf-empty').style.display = 'block';
+    return;
+  }
+  canvas.style.display = 'block';
+  $('#perf-empty').style.display = 'none';
+
+  drawLineChart(canvas, points.map(p => ({ date: p.date, value: p.maxWeight })));
+}
+
+function drawLineChart(canvas, points) {
+  const ctx = canvas.getContext('2d');
+  const cssWidth = canvas.clientWidth || 320;
+  const cssHeight = canvas.clientHeight || 280;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = cssWidth * dpr;
+  canvas.height = cssHeight * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+  const padL = 40, padR = 16, padT = 20, padB = 28;
+  const w = cssWidth - padL - padR;
+  const h = cssHeight - padT - padB;
+
+  const values = points.map(p => p.value);
+  let min = Math.min(...values);
+  let max = Math.max(...values);
+  if (min === max) { min -= 5; max += 5; }
+  const pad = (max - min) * 0.12;
+  min = Math.max(0, min - pad);
+  max = max + pad;
+
+  const xFor = (i) => padL + (points.length === 1 ? w / 2 : (i / (points.length - 1)) * w);
+  const yFor = (v) => padT + h - ((v - min) / (max - min)) * h;
+
+  // grille horizontale + labels Y
+  ctx.strokeStyle = '#363c45';
+  ctx.fillStyle = '#8b8f98';
+  ctx.font = '11px -apple-system, system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+  const steps = 4;
+  for (let i = 0; i <= steps; i++) {
+    const v = min + ((max - min) * i) / steps;
+    const y = yFor(v);
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(padL + w, y);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.round(v), padL - 8, y);
+  }
+
+  // ligne de progression
+  ctx.strokeStyle = '#c8f14d';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = xFor(i), y = yFor(p.value);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // points
+  ctx.fillStyle = '#c8f14d';
+  points.forEach((p, i) => {
+    const x = xFor(i), y = yFor(p.value);
+    ctx.beginPath();
+    ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // labels X (premier, milieu, dernier)
+  ctx.fillStyle = '#8b8f98';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const shortDate = (key) => { const [, m, d] = key.split('-'); return `${d}/${m}`; };
+  const idxs = points.length > 1 ? [0, Math.floor((points.length - 1) / 2), points.length - 1] : [0];
+  [...new Set(idxs)].forEach(i => {
+    ctx.fillText(shortDate(points[i].date), xFor(i), padT + h + 8);
+  });
 }

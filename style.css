@@ -146,6 +146,27 @@ input, select{
 .cal-arrow{ width:40px; height:40px; border-radius:50%; font-size:18px; }
 .cal-arrow:active{ background: var(--surface); }
 
+/* ---- onglets segmentés (calendrier, plages performance) ---- */
+.segmented{
+  display:flex;
+  gap:6px;
+  padding: 4px 16px 12px;
+  overflow-x:auto;
+}
+.segmented.wrap{ flex-wrap:wrap; overflow-x:visible; }
+.segmented::-webkit-scrollbar{ display:none; }
+.seg-btn{
+  flex-shrink:0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size:13px;
+  font-weight:600;
+  color: var(--text-muted);
+}
+.seg-btn.active{ background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
 .week-grid{
   display:grid;
   grid-template-columns: repeat(7, 1fr);
@@ -174,6 +195,46 @@ input, select{
 .day-cell.today{ border-color: var(--accent); }
 .day-cell .num{ font-size:15px; font-weight:700; }
 .day-cell.today .num{ color: var(--accent); }
+
+/* ---- vue mensuelle façon Strava : cercles pleins avec icône ---- */
+.month-grid{
+  display:grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: 1fr;
+  gap:4px;
+  padding: 4px 12px 0;
+}
+.month-day{
+  position:relative;
+  aspect-ratio: 1/1;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: transparent;
+  display:flex; align-items:center; justify-content:center;
+  font-size:13px;
+  font-weight:600;
+  color: var(--text-muted);
+}
+.month-day.today{ border: 2px solid var(--accent); color: var(--accent); font-weight:800; }
+.month-day.out-month{ border-color: transparent; opacity: 0.32; }
+.month-day.has-activity{
+  border: none;
+  color: #fff;
+  font-size: 17px;
+}
+.month-day-extra{
+  position:absolute;
+  top:-3px; right:-3px;
+  min-width:16px; height:16px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  border: 1px solid var(--bg);
+  font-size: 9px;
+  font-weight:800;
+  color: var(--text);
+  display:flex; align-items:center; justify-content:center;
+}
 .day-ticks{
   margin-top: 6px;
   display:flex;
@@ -294,6 +355,26 @@ input[type="color"]{
   width:10px; height:10px; border-radius:50%;
   display:inline-block; margin-right:8px; flex-shrink:0;
 }
+.icon-badge{
+  width:22px; height:22px;
+  border-radius:50%;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:12px;
+  margin-right:8px;
+  flex-shrink:0;
+}
+.icon-picker{
+  display:flex; flex-wrap:wrap; gap:8px;
+}
+.icon-picker button{
+  width:42px; height:42px;
+  border-radius: var(--radius-s);
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  font-size:19px;
+  display:flex; align-items:center; justify-content:center;
+}
+.icon-picker button.selected{ border-color: var(--accent); background: var(--surface-raised); }
 
 .exercise-card{
   background: var(--surface);
@@ -321,7 +402,17 @@ input[type="color"]{
   padding: 8px 10px;
 }
 .set-weight-row .lbl{ font-size:13px; color:var(--text-muted); }
-.set-weight-row input{ width:84px; padding:6px 8px; text-align:center; }
+.weight-stepper{ display:flex; align-items:center; gap:8px; }
+.weight-stepper button{
+  width:26px; height:26px; border-radius:50%;
+  background: var(--surface-raised);
+  font-weight:800;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+.weight-stepper button:active{ background: var(--line); }
+.weight-stepper input{ width:56px; padding:6px 4px; text-align:center; }
+.weight-stepper .unit{ font-size:12px; color:var(--text-muted); }
 
 .add-exercise-btn{
   margin: 8px 16px 20px;
@@ -465,7 +556,13 @@ input[type="color"]{
   min-width: 180px;
 }
 .rest-next-sets .row .n{ color: var(--text-muted); }
+.rest-next-sets .row.is-next{ border-color: var(--rest); }
 .rest-screen .wk-quit{ margin-top: 4px; }
+#btn-skip-rest{
+  padding: 9px 20px;
+  font-size:13px;
+  font-weight:600;
+}
 
 /* ===== Modale générique ===== */
 .modal-overlay{
@@ -508,3 +605,13 @@ input[type="color"]{
   .wk-exname{ font-size:24px; }
   .stat-box{ padding:12px 14px; min-width:80px; }
 }
+
+/* ===== Performance ===== */
+.perf-chart-wrap{
+  margin: 8px 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 14px 10px;
+}
+#perf-canvas{ width:100%; height:240px; display:block; }

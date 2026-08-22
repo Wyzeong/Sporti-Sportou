@@ -59,13 +59,35 @@
       <button class="icon-btn back-link" data-nav="home">←</button>
       <h1>Calendrier</h1>
     </div>
-    <div class="cal-nav">
-      <button class="icon-btn cal-arrow" id="cal-prev">‹</button>
-      <div class="week-label" id="cal-week-label"></div>
-      <button class="icon-btn cal-arrow" id="cal-next">›</button>
+
+    <div class="segmented" id="cal-mode-tabs">
+      <button class="seg-btn active" data-calmode="week">Semaine</button>
+      <button class="seg-btn" data-calmode="month">Mois</button>
+      <button class="seg-btn" data-calmode="history">Historique</button>
     </div>
-    <div class="week-grid" id="cal-day-heads"></div>
-    <div class="week-grid" id="cal-grid" style="margin-top:2px;"></div>
+
+    <div id="cal-week-view">
+      <div class="cal-nav">
+        <button class="icon-btn cal-arrow" id="cal-prev">‹</button>
+        <div class="week-label" id="cal-week-label"></div>
+        <button class="icon-btn cal-arrow" id="cal-next">›</button>
+      </div>
+      <div class="week-grid" id="cal-day-heads"></div>
+      <div class="week-grid" id="cal-grid" style="margin-top:2px;"></div>
+    </div>
+
+    <div id="cal-month-view" style="display:none;">
+      <div class="cal-nav">
+        <button class="icon-btn cal-arrow" id="cal-month-prev">‹</button>
+        <div class="week-label" id="cal-month-label"></div>
+        <button class="icon-btn cal-arrow" id="cal-month-next">›</button>
+      </div>
+      <div class="week-grid" id="cal-month-day-heads"></div>
+      <div class="month-grid" id="cal-month-grid"></div>
+    </div>
+
+    <div id="cal-history-view" class="list" style="display:none;"></div>
+
     <div class="day-detail" id="day-detail" style="display:none;"></div>
   </section>
 
@@ -78,13 +100,27 @@
     <div class="list" id="seances-list"></div>
   </section>
 
-  <!-- ===================== PERFORMANCE (à venir) ===================== -->
+  <!-- ===================== PERFORMANCE ===================== -->
   <section id="view-performance" class="view">
     <div class="topbar">
       <button class="icon-btn back-link" data-nav="home">←</button>
       <h1>Performance</h1>
     </div>
-    <div class="empty-state"><span class="big">📈</span>Les graphiques de progression par exercice arrivent bientôt.</div>
+    <div class="field">
+      <label>Exercice</label>
+      <select id="perf-exercise-select"></select>
+    </div>
+    <div class="segmented wrap" id="perf-range-tabs">
+      <button class="seg-btn" data-range="1m">1 mois</button>
+      <button class="seg-btn" data-range="3m">3 mois</button>
+      <button class="seg-btn active" data-range="6m">6 mois</button>
+      <button class="seg-btn" data-range="1y">1 an</button>
+      <button class="seg-btn" data-range="all">Tout</button>
+    </div>
+    <div class="perf-chart-wrap">
+      <canvas id="perf-canvas" width="600" height="280"></canvas>
+    </div>
+    <div class="empty-state" id="perf-empty" style="display:none;"><span class="big">📈</span>Pas encore de données pour cet exercice.</div>
   </section>
 
   <!-- Détail d'une séance : démarrer / modifier -->
@@ -143,6 +179,10 @@
         <label>Repos / exercices (s)</label>
         <input type="number" id="tpl-rest-exercises" inputmode="numeric" placeholder="120">
       </div>
+    </div>
+    <div class="field">
+      <label>Icône</label>
+      <div class="icon-picker" id="tpl-icon-picker"></div>
     </div>
     <div id="tpl-exercises-list" style="margin-top:8px;"></div>
     <button class="add-exercise-btn" id="btn-add-exercise">+ Ajouter un exercice</button>
