@@ -137,6 +137,20 @@
       <button class="add-exercise-btn" id="btn-new-template" style="margin:14px 0 0;">+ Nouvelle séance</button>
     </div>
     <div class="settings-section">
+      <h3>Sauvegarde</h3>
+      <div class="settings-row">
+        <span class="k">État</span>
+        <span class="v" id="drive-status-text">Non connecté</span>
+      </div>
+      <button class="add-exercise-btn" id="btn-google-connect" style="margin-top:10px;">Connecter à Google Drive</button>
+      <div id="drive-actions" style="display:none; gap:8px; margin-top:10px;">
+        <button class="btn ghost" id="btn-drive-export" style="flex:1;">Exporter</button>
+        <button class="btn ghost" id="btn-drive-import" style="flex:1;">Importer</button>
+      </div>
+      <div class="meta" id="drive-last-export" style="display:none; margin-top:8px;"></div>
+      <div class="wk-quit" id="btn-drive-disconnect" style="display:none; margin-top:10px;">Se déconnecter</div>
+    </div>
+    <div class="settings-section">
       <h3>À propos</h3>
       <div class="settings-row">
         <span class="k">Version</span>

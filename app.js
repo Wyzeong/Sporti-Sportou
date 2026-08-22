@@ -1,6 +1,6 @@
 /* app.js — logique de l'appli, vanilla JS, aucune dépendance */
 
-const APP_VERSION = '0.9.0';
+const APP_VERSION = '0.10.0';
 
 const MOTIVATION_QUOTES = [
   "Encore une série, encore un pas.",
@@ -133,7 +133,7 @@ document.addEventListener('click', (e) => {
     const target = navBtn.dataset.nav;
     if (target === 'calendar') { renderCalendar(); }
     if (target === 'seances') { renderSeancesList(); }
-    if (target === 'parametres') { renderParametresList(); }
+    if (target === 'parametres') { renderParametresList(); renderGoogleDriveSection(); }
     if (target === 'performance') { renderPerformance(); }
     showView(target);
   }
@@ -156,6 +156,7 @@ async function init() {
     showView('workout');
     renderWorkout();
   }
+  renderGoogleDriveSection();
 }
 
 async function loadTemplates() {
@@ -974,3 +975,195 @@ function drawLineChart(canvas, points) {
     ctx.fillText(shortDate(points[i].date), xFor(i), padT + h + 8);
   });
 }
+
+/* ===================== GOOGLE DRIVE (sauvegarde) ===================== */
+// Flux OAuth 100% côté client (Google Identity Services), sans backend.
+// Scope drive.file : l'appli ne voit que les fichiers qu'elle crée elle-même.
+const GOOGLE_CLIENT_ID = '276324048061-j1muj0cnmohv1ljuh33m5ich2ga3ar44.apps.googleusercontent.com';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const BACKUP_FILENAME = 'sporti-sportou-backup.json';
+
+let gTokenClient = null;
+let gAccessToken = null;
+let gTokenExpiry = 0;
+let gScriptLoading = null;
+
+function loadGoogleScript() {
+  if (window.google && window.google.accounts) return Promise.resolve();
+  if (gScriptLoading) return gScriptLoading;
+  gScriptLoading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Chargement de Google Identity Services impossible'));
+    document.head.appendChild(s);
+  });
+  return gScriptLoading;
+}
+
+async function connectGoogleDrive() {
+  try {
+    await loadGoogleScript();
+  } catch (e) {
+    toast('Connexion impossible (vérifie ta connexion internet)');
+    return;
+  }
+  if (!gTokenClient) {
+    gTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: DRIVE_SCOPE,
+      callback: async (resp) => {
+        if (resp.error) { toast('Connexion refusée'); return; }
+        gAccessToken = resp.access_token;
+        gTokenExpiry = Date.now() + (Number(resp.expires_in) || 3600) * 1000;
+        await DB.setKV('googleConnected', true);
+        toast('Connecté à Google Drive');
+        renderGoogleDriveSection();
+      },
+    });
+  }
+  gTokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+function ensureGoogleToken() {
+  return new Promise((resolve, reject) => {
+    if (gAccessToken && Date.now() < gTokenExpiry - 60000) { resolve(gAccessToken); return; }
+    if (!gTokenClient) { reject(new Error('not-connected')); return; }
+    const prevCallback = gTokenClient.callback;
+    gTokenClient.callback = (resp) => {
+      gTokenClient.callback = prevCallback;
+      if (resp.error) { reject(new Error(resp.error)); return; }
+      gAccessToken = resp.access_token;
+      gTokenExpiry = Date.now() + (Number(resp.expires_in) || 3600) * 1000;
+      resolve(gAccessToken);
+    };
+    gTokenClient.requestAccessToken({ prompt: '' });
+  });
+}
+
+async function buildBackupPayload() {
+  const [templates, planned, logs] = await Promise.all([
+    DB.getAllTemplates(),
+    DB.getAllPlanned(),
+    DB.getAllExerciseLogs(),
+  ]);
+  return {
+    app: 'Sporti-Sportou',
+    version: APP_VERSION,
+    exportedAt: new Date().toISOString(),
+    templates,
+    planned,
+    exerciseLogs: logs,
+  };
+}
+
+async function driveFindFileId(token) {
+  const q = encodeURIComponent(`name='${BACKUP_FILENAME}' and trashed=false`);
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,name)`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('drive-list-failed');
+  const data = await res.json();
+  return (data.files && data.files.length) ? data.files[0].id : null;
+}
+
+async function driveExport() {
+  try {
+    const token = await ensureGoogleToken();
+    const payload = JSON.stringify(await buildBackupPayload(), null, 2);
+
+    let fileId = await DB.getKV('googleBackupFileId');
+    if (!fileId) fileId = await driveFindFileId(token);
+
+    if (fileId) {
+      const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: payload,
+      });
+      if (!res.ok) throw new Error('drive-update-failed');
+    } else {
+      const boundary = 'sporti_sportou_boundary';
+      const metadata = { name: BACKUP_FILENAME, mimeType: 'application/json' };
+      const body =
+        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+        `--${boundary}\r\nContent-Type: application/json\r\n\r\n${payload}\r\n--${boundary}--`;
+      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
+        body,
+      });
+      if (!res.ok) throw new Error('drive-create-failed');
+      const data = await res.json();
+      fileId = data.id;
+    }
+
+    await DB.setKV('googleBackupFileId', fileId);
+    await DB.setKV('googleLastExport', new Date().toISOString());
+    toast('Sauvegardé sur Google Drive');
+    renderGoogleDriveSection();
+  } catch (e) {
+    toast('Échec de l\'export Google Drive');
+  }
+}
+
+async function driveImport() {
+  if (!confirm('Importer va remplacer tes séances, ton calendrier et ton historique actuels par la sauvegarde Drive. Continuer ?')) return;
+  try {
+    const token = await ensureGoogleToken();
+    let fileId = await DB.getKV('googleBackupFileId');
+    if (!fileId) fileId = await driveFindFileId(token);
+    if (!fileId) { toast('Aucune sauvegarde trouvée sur Drive'); return; }
+
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error('drive-download-failed');
+    const data = await res.json();
+
+    await DB.restoreFromBackup(data);
+    await DB.setKV('googleBackupFileId', fileId);
+    await loadTemplates();
+    toast('Import terminé');
+    renderParametresList();
+  } catch (e) {
+    toast('Échec de l\'import Google Drive');
+  }
+}
+
+function disconnectGoogleDrive() {
+  if (gAccessToken && window.google && google.accounts) {
+    google.accounts.oauth2.revoke(gAccessToken, () => {});
+  }
+  gAccessToken = null;
+  gTokenExpiry = 0;
+  DB.deleteKV('googleConnected');
+  toast('Déconnecté de Google Drive');
+  renderGoogleDriveSection();
+}
+
+async function renderGoogleDriveSection() {
+  const everConnected = await DB.getKV('googleConnected');
+  const lastExport = await DB.getKV('googleLastExport');
+  const isLive = !!gAccessToken;
+
+  $('#btn-google-connect').style.display = isLive ? 'none' : 'block';
+  $('#btn-google-connect').textContent = everConnected ? 'Se reconnecter à Google Drive' : 'Connecter à Google Drive';
+  $('#drive-actions').style.display = isLive ? 'flex' : 'none';
+  $('#btn-drive-disconnect').style.display = isLive ? 'block' : 'none';
+  $('#drive-status-text').textContent = isLive ? 'Connecté' : (everConnected ? 'Session expirée' : 'Non connecté');
+
+  const lastExportEl = $('#drive-last-export');
+  if (lastExport) {
+    const d = new Date(lastExport);
+    lastExportEl.textContent = `Dernière sauvegarde : ${d.toLocaleDateString('fr-FR')} ${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+    lastExportEl.style.display = 'block';
+  } else {
+    lastExportEl.style.display = 'none';
+  }
+}
+
+$('#btn-google-connect').addEventListener('click', connectGoogleDrive);
+$('#btn-drive-export').addEventListener('click', driveExport);
+$('#btn-drive-import').addEventListener('click', driveImport);
+$('#btn-drive-disconnect').addEventListener('click', disconnectGoogleDrive);

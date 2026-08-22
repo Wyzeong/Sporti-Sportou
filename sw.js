@@ -1,6 +1,6 @@
 /* sw.js — cache-first app shell, incrémenter CACHE_NAME à chaque version */
 
-const CACHE_NAME = 'sport-app-cache-v0.9.0';
+const CACHE_NAME = 'sport-app-cache-v0.10.0';
 
 const APP_SHELL = [
   './',
@@ -39,6 +39,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  if (new URL(event.request.url).origin !== self.location.origin) return; // laisse passer les appels externes (Google, etc.) sans les mettre en cache
 
   event.respondWith(
     caches.match(event.request).then(cached => {

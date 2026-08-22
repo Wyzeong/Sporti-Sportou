@@ -107,6 +107,20 @@ const DB = {
     return all.filter(l => l.exerciseName === name);
   },
 
+  // ---- sauvegarde / restauration (Google Drive) ----
+  async clearStore(name) {
+    const store = await tx(name, 'readwrite');
+    return wrapRequest(store.clear());
+  },
+  async restoreFromBackup(data) {
+    await DB.clearStore('templates');
+    await DB.clearStore('planned');
+    await DB.clearStore('exerciseLogs');
+    for (const t of data.templates || []) await DB.saveTemplate(t);
+    for (const p of data.planned || []) await DB.savePlanned(p);
+    for (const l of data.exerciseLogs || []) await DB.saveExerciseLog(l);
+  },
+
   // ---- clé / valeur (version, session active) ----
   async getKV(key) {
     const store = await tx('kv', 'readonly');
