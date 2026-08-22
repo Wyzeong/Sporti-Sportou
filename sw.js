@@ -1,6 +1,6 @@
 /* sw.js — cache-first app shell, incrémenter CACHE_NAME à chaque version */
 
-const CACHE_NAME = 'sport-app-cache-v0.5.0';
+const CACHE_NAME = 'sport-app-cache-v0.8.0';
 
 const APP_SHELL = [
   './',
@@ -13,12 +13,17 @@ const APP_SHELL = [
   './icons/icon-512.png',
   './icons/icon-512-maskable.png',
   './icons/apple-touch-icon.png',
+  './sounds/victory.mp3',
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(APP_SHELL))
+      .then(cache => Promise.all(
+        // chaque fichier est mis en cache indépendamment : si un son n'est pas
+        // encore déposé dans /sounds/, ça ne bloque pas le reste de l'appli
+        APP_SHELL.map(url => cache.add(url).catch(() => {}))
+      ))
       .then(() => self.skipWaiting())
   );
 });

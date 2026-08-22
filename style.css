@@ -559,7 +559,10 @@ input[type="color"]{
 .rest-next-sets .row.is-next{ border-color: var(--rest); }
 .rest-screen .wk-quit{ margin-top: 4px; }
 #btn-skip-rest{
-  padding: 9px 20px;
+  flex: none;
+  align-self: center;
+  width: auto;
+  padding: 8px 18px;
   font-size:13px;
   font-weight:600;
 }

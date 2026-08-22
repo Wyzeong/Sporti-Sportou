@@ -1,6 +1,6 @@
 /* app.js — logique de l'appli, vanilla JS, aucune dépendance */
 
-const APP_VERSION = '0.5.0';
+const APP_VERSION = '0.8.0';
 
 const MOTIVATION_QUOTES = [
   "Encore une série, encore un pas.",
@@ -31,9 +31,8 @@ const $all = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
 const state = {
   templates: [],
-  currentWeekStart: mondayOf(new Date()),
   currentMonth: firstOfMonth(new Date()),
-  calendarMode: 'week',
+  calendarMode: 'month',
   selectedDayKey: null,
   editingTemplate: null,
   templateEditReturnTo: 'parametres',
@@ -62,13 +61,6 @@ function mondayOf(d) {
 function firstOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 function addMonths(d, n) { return new Date(d.getFullYear(), d.getMonth() + n, 1); }
 const MOIS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
-function weekLabel(monday) {
-  const sunday = addDays(monday, 6);
-  if (monday.getMonth() === sunday.getMonth()) {
-    return `${monday.getDate()} – ${sunday.getDate()} ${MOIS[monday.getMonth()]} ${monday.getFullYear()}`;
-  }
-  return `${monday.getDate()} ${MOIS[monday.getMonth()]} – ${sunday.getDate()} ${MOIS[sunday.getMonth()]} ${sunday.getFullYear()}`;
-}
 function fmtWeight(w) {
   const n = Number(w);
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10);
@@ -173,14 +165,31 @@ async function loadTemplates() {
 
 document.addEventListener('DOMContentLoaded', init);
 
-/* ===================== SON (Web Audio, généré, sans fichier) ===================== */
+/* ===================== SON ===================== */
+// Le tick de décompte et le son de reprise restent générés (Web Audio, aucun fichier).
+// Seule la fin de séance utilise un vrai fichier audio : dépose-le dans /sounds/
+// à la racine du projet, à côté d'index.html, avec exactement ce nom :
+//   sounds/victory.mp3  -> joué à la fin d'une séance réussie
+// Format recommandé : .mp3 (le plus fiable sur iOS Safari).
+
 let audioCtx = null;
+let victoryAudio = null;
+
 function ensureAudio() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
   } catch (e) { /* audio indisponible, on ignore silencieusement */ }
+
+  if (!victoryAudio) {
+    victoryAudio = new Audio('sounds/victory.mp3');
+    victoryAudio.preload = 'auto';
+    // débloque la lecture du fichier sur iOS : doit être appelé pendant un geste utilisateur
+    victoryAudio.play().then(() => victoryAudio.pause()).catch(() => {});
+    victoryAudio.currentTime = 0;
+  }
 }
+
 function beep(freq, duration, when = 0, volume = 0.35) {
   if (!audioCtx) return;
   const t0 = audioCtx.currentTime + when;
@@ -198,21 +207,25 @@ function beep(freq, duration, when = 0, volume = 0.35) {
 function playTick() { beep(880, 0.09, 0, 0.3); }
 function playGo() { beep(700, 0.14, 0); beep(1050, 0.22, 0.13, 0.4); }
 
+function playVictoryFanfare() {
+  if (!victoryAudio) return;
+  const node = victoryAudio.cloneNode();
+  node.play().catch(() => { /* fichier absent ou lecture bloquée : on ignore silencieusement */ });
+}
+
+
 /* ===================== CALENDRIER ===================== */
 const JOURS = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
 const MOIS_LONG = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
 function renderCalendarHeads() {
-  ['#cal-day-heads', '#cal-month-day-heads'].forEach(sel => {
-    $(sel).innerHTML = JOURS.map(j => `<div class="day-head">${j}</div>`).join('');
-  });
+  $('#cal-month-day-heads').innerHTML = JOURS.map(j => `<div class="day-head">${j}</div>`).join('');
 }
 
 $all('[data-calmode]').forEach(btn => {
   btn.addEventListener('click', () => {
     state.calendarMode = btn.dataset.calmode;
     $all('[data-calmode]').forEach(b => b.classList.toggle('active', b === btn));
-    $('#cal-week-view').style.display = state.calendarMode === 'week' ? 'block' : 'none';
     $('#cal-month-view').style.display = state.calendarMode === 'month' ? 'block' : 'none';
     $('#cal-history-view').style.display = state.calendarMode === 'history' ? 'block' : 'none';
     state.selectedDayKey = null;
@@ -223,47 +236,9 @@ $all('[data-calmode]').forEach(btn => {
 
 async function renderCalendar() {
   renderCalendarHeads();
-  if (state.calendarMode === 'week') await renderCalendarWeek();
-  else if (state.calendarMode === 'month') await renderCalendarMonth();
+  if (state.calendarMode === 'month') await renderCalendarMonth();
   else await renderCalendarHistory();
 }
-
-async function renderCalendarWeek() {
-  $('#cal-week-label').textContent = weekLabel(state.currentWeekStart);
-
-  const days = Array.from({ length: 7 }, (_, i) => addDays(state.currentWeekStart, i));
-  const startKey = dateKey(days[0]);
-  const endKey = dateKey(days[6]);
-  const planned = await DB.getPlannedForRange(startKey, endKey);
-
-  const byDay = {};
-  planned.forEach(p => { (byDay[p.date] = byDay[p.date] || []).push(p); });
-
-  const todayKey = dateKey(new Date());
-  const grid = $('#cal-grid');
-  grid.innerHTML = days.map(d => {
-    const key = dateKey(d);
-    const isToday = key === todayKey;
-    const entries = byDay[key] || [];
-    const ticks = entries.slice(0, 4).map(p => `<span class="tick" style="background:${p.color || 'var(--rest)'}"></span>`).join('');
-    return `<button class="day-cell${isToday ? ' today' : ''}" data-day="${key}">
-              <span class="num">${d.getDate()}</span>
-              <span class="day-ticks">${ticks}</span>
-            </button>`;
-  }).join('');
-
-  $all('.day-cell', grid).forEach(cell => {
-    cell.addEventListener('click', () => {
-      state.selectedDayKey = cell.dataset.day;
-      renderDayDetail();
-    });
-  });
-
-  if (state.selectedDayKey) renderDayDetail();
-}
-
-$('#cal-prev').addEventListener('click', () => { state.currentWeekStart = addDays(state.currentWeekStart, -7); renderCalendarWeek(); });
-$('#cal-next').addEventListener('click', () => { state.currentWeekStart = addDays(state.currentWeekStart, 7); renderCalendarWeek(); });
 
 async function renderCalendarMonth() {
   const monthStart = state.currentMonth;
@@ -771,6 +746,8 @@ async function finishWorkout() {
   }
   state.activeSession = null;
   await DB.deleteKV('activeSession');
+  ensureAudio();
+  playVictoryFanfare();
   toast('Séance terminée 💪');
   showView('home');
 }
