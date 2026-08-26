@@ -46,7 +46,7 @@
       <button class="home-btn" data-nav="parametres">
         <span class="glyph">⚙️</span>
         <span>
-          <span class="label">Paramètres</span>
+          <span class="label">Réglages</span>
           <span class="sub">Créer et modifier tes séances</span>
         </span>
       </button>
@@ -129,7 +129,7 @@
   <section id="view-parametres" class="view">
     <div class="topbar">
       <button class="icon-btn back-link" data-nav="home">←</button>
-      <h1>Paramètres</h1>
+      <h1>Réglages</h1>
     </div>
     <div class="settings-section">
       <h3>Mes séances</h3>
@@ -240,6 +240,18 @@
     <div class="chip-list" id="modal-templates-chips"></div>
     <div class="detail-actions" style="padding:20px 0 0;">
       <button class="btn ghost" id="modal-add-session-cancel">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modale : choisir quelle sauvegarde Drive importer -->
+<div class="modal-overlay hidden" id="modal-drive-import">
+  <div class="modal-sheet">
+    <div class="modal-grip"></div>
+    <h3>Choisir une sauvegarde à importer</h3>
+    <div id="drive-import-list"></div>
+    <div class="detail-actions" style="padding:20px 0 0;">
+      <button class="btn ghost" id="modal-drive-import-cancel">Annuler</button>
     </div>
   </div>
 </div>

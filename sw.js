@@ -1,6 +1,6 @@
 /* sw.js — cache-first app shell, incrémenter CACHE_NAME à chaque version */
 
-const CACHE_NAME = 'sport-app-cache-v0.10.1';
+const CACHE_NAME = 'sport-app-cache-v0.11.1';
 
 const APP_SHELL = [
   './',
@@ -14,7 +14,6 @@ const APP_SHELL = [
   './icons/icon-512-maskable.png',
   './icons/apple-touch-icon.png',
   './sounds/victory.mp3',
-  './sounds/countdown.mp3',
 ];
 
 self.addEventListener('install', (event) => {

@@ -1,6 +1,6 @@
 /* app.js — logique de l'appli, vanilla JS, aucune dépendance */
 
-const APP_VERSION = '0.10.1';
+const APP_VERSION = '0.11.1';
 
 const MOTIVATION_QUOTES = [
   "Encore une série, encore un pas.",
@@ -41,7 +41,6 @@ const state = {
   restTimer: null,
   restTotal: 0,
   restRemaining: 0,
-  countdownSoundPlayed: false,
   lastQuoteIndex: -1,
   perfExercise: null,
   perfRange: '6m',
@@ -168,23 +167,14 @@ async function loadTemplates() {
 document.addEventListener('DOMContentLoaded', init);
 
 /* ===================== SON ===================== */
-// Le tick de décompte et le son de reprise restent générés (Web Audio, aucun fichier).
+// Le tick de décompte et le son de reprise sont générés (Web Audio, aucun fichier).
 // Seule la fin de séance utilise un vrai fichier audio : dépose-le dans /sounds/
 // à la racine du projet, à côté d'index.html, avec exactement ce nom :
 //   sounds/victory.mp3  -> joué à la fin d'une séance réussie
 // Format recommandé : .mp3 (le plus fiable sur iOS Safari).
 
-/* ===================== SON ===================== */
-// Deux vrais fichiers audio à déposer dans /sounds/ à la racine du projet,
-// à côté d'index.html, avec exactement ces noms :
-//   sounds/countdown.mp3 -> démarre quand le repos atteint 4 secondes restantes,
-//                           joue jusqu'à sa fin (couvre le décompte ET la reprise)
-//   sounds/victory.mp3   -> joué à la fin d'une séance réussie
-// Format recommandé : .mp3 (le plus fiable sur iOS Safari).
-
 let audioCtx = null;
 let victoryAudio = null;
-let countdownAudio = null;
 
 function ensureAudio() {
   try {
@@ -195,13 +185,8 @@ function ensureAudio() {
   if (!victoryAudio) {
     victoryAudio = new Audio('sounds/victory.mp3');
     victoryAudio.preload = 'auto';
-    // débloque la lecture des fichiers sur iOS : doit être appelé pendant un geste utilisateur
+    // débloque la lecture du fichier sur iOS : doit être appelé pendant un geste utilisateur
     victoryAudio.play().then(() => { victoryAudio.pause(); victoryAudio.currentTime = 0; }).catch(() => {});
-  }
-  if (!countdownAudio) {
-    countdownAudio = new Audio('sounds/countdown.mp3');
-    countdownAudio.preload = 'auto';
-    countdownAudio.play().then(() => { countdownAudio.pause(); countdownAudio.currentTime = 0; }).catch(() => {});
   }
 }
 
@@ -214,14 +199,22 @@ function playVictoryFanfare() {
   } catch (e) { /* ignore */ }
 }
 
-function playCountdownSound() {
-  if (!countdownAudio) return;
-  try {
-    countdownAudio.pause();
-    countdownAudio.currentTime = 0;
-    countdownAudio.play().catch(() => { /* lecture bloquée : on ignore silencieusement */ });
-  } catch (e) { /* ignore */ }
+function beep(freq, duration, when = 0, volume = 0.35) {
+  if (!audioCtx) return;
+  const t0 = audioCtx.currentTime + when;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(freq, t0);
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(volume, t0 + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(t0);
+  osc.stop(t0 + duration + 0.02);
 }
+function playTick() { beep(880, 0.09, 0, 0.3); }
+function playGo() { beep(700, 0.14, 0); beep(1050, 0.22, 0.13, 0.4); }
 
 
 /* ===================== CALENDRIER ===================== */
@@ -388,7 +381,7 @@ function openAddSessionModal() {
   const modal = $('#modal-add-session');
   const chips = $('#modal-templates-chips');
   if (state.templates.length === 0) {
-    chips.innerHTML = `<p style="color:var(--text-muted); font-size:14px;">Aucune séance créée. Va dans Paramètres pour en créer une.</p>`;
+    chips.innerHTML = `<p style="color:var(--text-muted); font-size:14px;">Aucune séance créée. Va dans Réglages pour en créer une.</p>`;
   } else {
     chips.innerHTML = state.templates.map(t =>
       `<button class="chip" data-tpl="${t.id}">${iconBadge(t.color, t.icon)}${escapeHtml(t.name)}</button>`
@@ -412,7 +405,7 @@ $('#modal-add-session-cancel').addEventListener('click', () => $('#modal-add-ses
 function renderSeancesList() {
   const list = $('#seances-list');
   if (state.templates.length === 0) {
-    list.innerHTML = `<div class="empty-state"><span class="big">🏋️</span>Aucune séance pour l'instant.<br>Crée-en une depuis Paramètres.</div>`;
+    list.innerHTML = `<div class="empty-state"><span class="big">🏋️</span>Aucune séance pour l'instant.<br>Crée-en une depuis Réglages.</div>`;
     return;
   }
   list.innerHTML = state.templates.map(t => {
@@ -793,7 +786,6 @@ function startRest(seconds, preview) {
   stopRestTimer();
   state.restTotal = seconds;
   state.restRemaining = seconds;
-  state.countdownSoundPlayed = false;
   $('#rest-eyebrow-label').textContent = preview.kind === 'exercises' ? 'REPOS AVANT LE PROCHAIN EXERCICE' : 'RÉCUPÉRATION ENTRE SÉRIES';
 
   const setsHtml = preview.sets.map((s, i) => `<div class="row${i === 0 ? ' is-next' : ''}"><span class="n">${escapeHtml(s.label)}</span><span>${fmtWeight(s.weight)} kg</span></div>`).join('');
@@ -803,17 +795,12 @@ function startRest(seconds, preview) {
   $('#rest-screen').style.display = 'flex';
   updateRestUI();
 
-  // si le repos est déjà de 4s ou moins, le son démarre tout de suite
-  if (state.restRemaining <= 4) {
-    playCountdownSound();
-    state.countdownSoundPlayed = true;
-  }
-
   state.restTimer = setInterval(() => {
     state.restRemaining -= 1;
     if (state.restRemaining <= 0) {
       state.restRemaining = 0;
       updateRestUI();
+      playGo();
       stopRestTimer();
       setTimeout(() => {
         $('#rest-screen').style.display = 'none';
@@ -821,10 +808,7 @@ function startRest(seconds, preview) {
       }, 550);
       return;
     }
-    if (state.restRemaining === 4 && !state.countdownSoundPlayed) {
-      playCountdownSound();
-      state.countdownSoundPlayed = true;
-    }
+    if (state.restRemaining <= 5) playTick();
     updateRestUI();
   }, 1000);
 }
@@ -1023,10 +1007,29 @@ async function connectGoogleDrive() {
         await DB.setKV('googleConnected', true);
         toast('Connecté à Google Drive');
         renderGoogleDriveSection();
+        scheduleGoogleTokenRefresh();
       },
     });
   }
-  gTokenClient.requestAccessToken({ prompt: 'consent' });
+  // si déjà connecté au moins une fois, on retente d'abord silencieusement
+  // (sans repasser par l'écran de consentement) avant de forcer l'affichage
+  const everConnected = await DB.getKV('googleConnected');
+  gTokenClient.requestAccessToken({ prompt: everConnected ? '' : 'consent' });
+}
+
+// retente un jeton un peu avant son expiration, tant que l'appli reste ouverte,
+// pour éviter à l'utilisateur de se reconnecter manuellement en cours de session
+let gRefreshTimer = null;
+function scheduleGoogleTokenRefresh() {
+  if (gRefreshTimer) clearTimeout(gRefreshTimer);
+  const delay = Math.max(gTokenExpiry - Date.now() - 5 * 60 * 1000, 30 * 1000);
+  gRefreshTimer = setTimeout(async () => {
+    try {
+      await ensureGoogleToken();
+      renderGoogleDriveSection();
+      scheduleGoogleTokenRefresh();
+    } catch (e) { /* silencieux : l'utilisateur devra taper sur "Se reconnecter" */ }
+  }, delay);
 }
 
 function ensureGoogleToken() {
@@ -1111,14 +1114,51 @@ async function driveExport() {
   }
 }
 
-async function driveImport() {
-  if (!confirm('Importer va remplacer tes séances, ton calendrier et ton historique actuels par la sauvegarde Drive. Continuer ?')) return;
+async function openDriveImportPicker() {
   try {
     const token = await ensureGoogleToken();
-    let fileId = await DB.getKV('googleBackupFileId');
-    if (!fileId) fileId = await driveFindFileId(token);
-    if (!fileId) { toast('Aucune sauvegarde trouvée sur Drive'); return; }
+    const q = encodeURIComponent("mimeType='application/json' and trashed=false");
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error('drive-list-failed');
+    const data = await res.json();
+    renderDriveImportModal(data.files || []);
+  } catch (e) {
+    toast('Impossible de récupérer la liste des sauvegardes Drive');
+  }
+}
 
+function renderDriveImportModal(files) {
+  const modal = $('#modal-drive-import');
+  const list = $('#drive-import-list');
+
+  if (files.length === 0) {
+    list.innerHTML = `<p style="color:var(--text-muted); font-size:14px;">Aucune sauvegarde trouvée sur ce compte Drive.</p>`;
+  } else {
+    list.innerHTML = files.map(f => {
+      const d = new Date(f.modifiedTime);
+      const dateStr = `${d.toLocaleDateString('fr-FR')} ${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+      return `<div class="list-item" data-file="${f.id}" style="cursor:pointer;">
+                <div class="name">${escapeHtml(f.name)}</div>
+                <div class="meta">Modifié le ${dateStr}</div>
+              </div>`;
+    }).join('');
+    $all('[data-file]', list).forEach(row => {
+      row.addEventListener('click', () => {
+        modal.classList.add('hidden');
+        driveImportFromFile(row.dataset.file);
+      });
+    });
+  }
+  modal.classList.remove('hidden');
+}
+$('#modal-drive-import-cancel').addEventListener('click', () => $('#modal-drive-import').classList.add('hidden'));
+
+async function driveImportFromFile(fileId) {
+  if (!confirm('Importer va remplacer tes séances, ton calendrier et ton historique actuels par cette sauvegarde. Continuer ?')) return;
+  try {
+    const token = await ensureGoogleToken();
     const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -1169,5 +1209,5 @@ async function renderGoogleDriveSection() {
 
 $('#btn-google-connect').addEventListener('click', connectGoogleDrive);
 $('#btn-drive-export').addEventListener('click', driveExport);
-$('#btn-drive-import').addEventListener('click', driveImport);
+$('#btn-drive-import').addEventListener('click', openDriveImportPicker);
 $('#btn-drive-disconnect').addEventListener('click', disconnectGoogleDrive);
