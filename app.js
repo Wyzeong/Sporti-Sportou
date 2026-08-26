@@ -1,6 +1,6 @@
 /* app.js — logique de l'appli, vanilla JS, aucune dépendance */
 
-const APP_VERSION = '0.10.0';
+const APP_VERSION = '0.10.1';
 
 const MOTIVATION_QUOTES = [
   "Encore une série, encore un pas.",
@@ -195,28 +195,32 @@ function ensureAudio() {
   if (!victoryAudio) {
     victoryAudio = new Audio('sounds/victory.mp3');
     victoryAudio.preload = 'auto';
-    victoryAudio.play().then(() => victoryAudio.pause()).catch(() => {});
-    victoryAudio.currentTime = 0;
+    // débloque la lecture des fichiers sur iOS : doit être appelé pendant un geste utilisateur
+    victoryAudio.play().then(() => { victoryAudio.pause(); victoryAudio.currentTime = 0; }).catch(() => {});
   }
   if (!countdownAudio) {
     countdownAudio = new Audio('sounds/countdown.mp3');
     countdownAudio.preload = 'auto';
-    // débloque la lecture des fichiers sur iOS : doit être appelé pendant un geste utilisateur
-    countdownAudio.play().then(() => countdownAudio.pause()).catch(() => {});
-    countdownAudio.currentTime = 0;
+    countdownAudio.play().then(() => { countdownAudio.pause(); countdownAudio.currentTime = 0; }).catch(() => {});
   }
 }
 
 function playVictoryFanfare() {
   if (!victoryAudio) return;
-  const node = victoryAudio.cloneNode();
-  node.play().catch(() => { /* fichier absent ou lecture bloquée : on ignore silencieusement */ });
+  try {
+    victoryAudio.pause();
+    victoryAudio.currentTime = 0;
+    victoryAudio.play().catch(() => { /* lecture bloquée : on ignore silencieusement */ });
+  } catch (e) { /* ignore */ }
 }
 
 function playCountdownSound() {
   if (!countdownAudio) return;
-  const node = countdownAudio.cloneNode();
-  node.play().catch(() => { /* fichier absent ou lecture bloquée : on ignore silencieusement */ });
+  try {
+    countdownAudio.pause();
+    countdownAudio.currentTime = 0;
+    countdownAudio.play().catch(() => { /* lecture bloquée : on ignore silencieusement */ });
+  } catch (e) { /* ignore */ }
 }
 
 

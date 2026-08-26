@@ -1,6 +1,6 @@
 /* sw.js — cache-first app shell, incrémenter CACHE_NAME à chaque version */
 
-const CACHE_NAME = 'sport-app-cache-v0.10.0';
+const CACHE_NAME = 'sport-app-cache-v0.10.1';
 
 const APP_SHELL = [
   './',
