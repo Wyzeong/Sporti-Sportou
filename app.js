@@ -1,6 +1,6 @@
 /* app.js — logique de l'appli, vanilla JS, aucune dépendance */
 
-const APP_VERSION = '0.13.0';
+const APP_VERSION = '0.13.2';
 
 const MOTIVATION_QUOTES = [
   "Encore une série, encore un pas.",
@@ -198,8 +198,26 @@ document.addEventListener('DOMContentLoaded', init);
 let audioCtx = null;
 let victoryBuffer = null;
 let victoryLoadStarted = false;
+let audioNeedsRebuild = false;
+
+// iOS coupe le contexte audio quand une autre appli passe au premier plan, et un
+// simple resume() ne suffit pas toujours à le relancer (il peut rester "actif"
+// sans plus jamais produire de son). On marque le contexte comme à reconstruire
+// dès que l'appli repasse en arrière-plan ; la reconstruction a lieu au prochain
+// vrai tap de l'utilisateur (dans ensureAudio), pour rester dans un geste valide.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) audioNeedsRebuild = true;
+});
 
 function ensureAudio() {
+  if (audioNeedsRebuild) {
+    audioNeedsRebuild = false;
+    try { if (audioCtx) audioCtx.close(); } catch (e) { /* ignore */ }
+    audioCtx = null;
+    victoryBuffer = null;
+    victoryLoadStarted = false;
+  }
+
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -233,22 +251,22 @@ function playVictoryFanfare() {
   } catch (e) { /* ignore */ }
 }
 
-function beep(freq, duration, when = 0, volume = 0.35) {
+function beep(freq, duration, when = 0, volume = 0.5, type = 'square') {
   if (!audioCtx) return;
   const t0 = audioCtx.currentTime + when;
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-  osc.type = 'sine';
+  osc.type = type;
   osc.frequency.setValueAtTime(freq, t0);
   gain.gain.setValueAtTime(0, t0);
-  gain.gain.linearRampToValueAtTime(volume, t0 + 0.015);
+  gain.gain.linearRampToValueAtTime(volume, t0 + 0.01);
   gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
   osc.connect(gain).connect(audioCtx.destination);
   osc.start(t0);
   osc.stop(t0 + duration + 0.02);
 }
-function playTick() { beep(880, 0.09, 0, 0.3); }
-function playGo() { beep(700, 0.14, 0); beep(1050, 0.22, 0.13, 0.4); }
+function playTick() { beep(1000, 0.12, 0, 0.7); }
+function playGo() { beep(700, 0.16, 0, 0.6); beep(1050, 0.28, 0.15, 0.65); }
 
 
 /* ===================== CALENDRIER ===================== */
