@@ -1,6 +1,7 @@
-/* sw.js — cache-first app shell, incrémenter CACHE_NAME à chaque version */
+/* sw.js — network-first app shell (toujours la dernière version en ligne,
+   secours sur le cache uniquement hors-ligne), incrémenter CACHE_NAME à chaque version */
 
-const CACHE_NAME = 'sport-app-cache-v0.11.1';
+const CACHE_NAME = 'sport-app-cache-v0.11.2';
 
 const APP_SHELL = [
   './',
@@ -41,17 +42,14 @@ self.addEventListener('fetch', (event) => {
   if (new URL(event.request.url).origin !== self.location.origin) return; // laisse passer les appels externes (Google, etc.) sans les mettre en cache
 
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      const networkFetch = fetch(event.request)
-        .then(response => {
-          if (response && response.status === 200) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached || caches.match('./index.html'));
-      return cached || networkFetch;
-    })
+    fetch(event.request)
+      .then(response => {
+        if (response && response.status === 200) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request).then(cached => cached || caches.match('./index.html')))
   );
 });

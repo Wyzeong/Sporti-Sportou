@@ -1,6 +1,6 @@
 /* app.js — logique de l'appli, vanilla JS, aucune dépendance */
 
-const APP_VERSION = '0.11.1';
+const APP_VERSION = '0.11.2';
 
 const MOTIVATION_QUOTES = [
   "Encore une série, encore un pas.",
