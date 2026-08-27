@@ -114,6 +114,33 @@ input, select{
   color: var(--text-muted);
   font-size: 14px;
 }
+.home-reminder{
+  margin: 0 24px 4px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.home-reminder .txt{ flex:1; font-size:13px; color: var(--text); }
+.home-reminder button{
+  font-size:12px;
+  font-weight:700;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--text);
+  flex-shrink:0;
+}
+.home-reminder #home-reminder-close{
+  padding: 6px 9px;
+  font-size:15px;
+  font-weight:400;
+  background: transparent;
+  color: var(--text-muted);
+}
 .home-btn{
   display:flex;
   align-items:center;

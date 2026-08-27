@@ -1,6 +1,6 @@
 /* app.js — logique de l'appli, vanilla JS, aucune dépendance */
 
-const APP_VERSION = '0.11.2';
+const APP_VERSION = '0.13.0';
 
 const MOTIVATION_QUOTES = [
   "Encore une série, encore un pas.",
@@ -156,7 +156,26 @@ async function init() {
     renderWorkout();
   }
   renderGoogleDriveSection();
+  checkDailyExportReminder();
 }
+
+async function checkDailyExportReminder() {
+  const today = dateKey(new Date());
+  const lastShown = await DB.getKV('exportReminderLastShown');
+  if (lastShown !== today) {
+    $('#home-export-reminder').style.display = 'flex';
+    await DB.setKV('exportReminderLastShown', today);
+  }
+}
+$('#home-reminder-close').addEventListener('click', () => {
+  $('#home-export-reminder').style.display = 'none';
+});
+$('#home-reminder-goto').addEventListener('click', () => {
+  $('#home-export-reminder').style.display = 'none';
+  renderParametresList();
+  renderGoogleDriveSection();
+  showView('parametres');
+});
 
 async function loadTemplates() {
   const raw = await DB.getAllTemplates();
@@ -167,35 +186,50 @@ async function loadTemplates() {
 document.addEventListener('DOMContentLoaded', init);
 
 /* ===================== SON ===================== */
-// Le tick de décompte et le son de reprise sont générés (Web Audio, aucun fichier).
-// Seule la fin de séance utilise un vrai fichier audio : dépose-le dans /sounds/
-// à la racine du projet, à côté d'index.html, avec exactement ce nom :
+// Un seul système audio pour tout (Web Audio API) : le tick de décompte et le son
+// de reprise sont synthétisés, et le fichier de fin de séance est chargé une fois
+// puis décodé dans ce même contexte, pour éviter de mélanger deux mécanismes de
+// déblocage différents (source probable des soucis précédents sur iOS).
+//
+// Fichier à déposer dans /sounds/ à la racine du projet, à côté d'index.html :
 //   sounds/victory.mp3  -> joué à la fin d'une séance réussie
 // Format recommandé : .mp3 (le plus fiable sur iOS Safari).
 
 let audioCtx = null;
-let victoryAudio = null;
+let victoryBuffer = null;
+let victoryLoadStarted = false;
 
 function ensureAudio() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    // joue un buffer silencieux immédiatement : finalise le déblocage sur iOS,
+    // qui exige un vrai départ de lecture pendant le geste utilisateur
+    const silent = audioCtx.createBuffer(1, 1, 22050);
+    const src = audioCtx.createBufferSource();
+    src.buffer = silent;
+    src.connect(audioCtx.destination);
+    src.start(0);
   } catch (e) { /* audio indisponible, on ignore silencieusement */ }
 
-  if (!victoryAudio) {
-    victoryAudio = new Audio('sounds/victory.mp3');
-    victoryAudio.preload = 'auto';
-    // débloque la lecture du fichier sur iOS : doit être appelé pendant un geste utilisateur
-    victoryAudio.play().then(() => { victoryAudio.pause(); victoryAudio.currentTime = 0; }).catch(() => {});
+  if (!victoryLoadStarted && audioCtx) {
+    victoryLoadStarted = true;
+    fetch('sounds/victory.mp3')
+      .then(res => res.arrayBuffer())
+      .then(buf => audioCtx.decodeAudioData(buf))
+      .then(decoded => { victoryBuffer = decoded; })
+      .catch(() => { victoryBuffer = null; });
   }
 }
 
 function playVictoryFanfare() {
-  if (!victoryAudio) return;
+  if (!audioCtx || !victoryBuffer) return;
   try {
-    victoryAudio.pause();
-    victoryAudio.currentTime = 0;
-    victoryAudio.play().catch(() => { /* lecture bloquée : on ignore silencieusement */ });
+    const src = audioCtx.createBufferSource();
+    src.buffer = victoryBuffer;
+    src.connect(audioCtx.destination);
+    src.start(0);
   } catch (e) { /* ignore */ }
 }
 
@@ -1007,29 +1041,10 @@ async function connectGoogleDrive() {
         await DB.setKV('googleConnected', true);
         toast('Connecté à Google Drive');
         renderGoogleDriveSection();
-        scheduleGoogleTokenRefresh();
       },
     });
   }
-  // si déjà connecté au moins une fois, on retente d'abord silencieusement
-  // (sans repasser par l'écran de consentement) avant de forcer l'affichage
-  const everConnected = await DB.getKV('googleConnected');
-  gTokenClient.requestAccessToken({ prompt: everConnected ? '' : 'consent' });
-}
-
-// retente un jeton un peu avant son expiration, tant que l'appli reste ouverte,
-// pour éviter à l'utilisateur de se reconnecter manuellement en cours de session
-let gRefreshTimer = null;
-function scheduleGoogleTokenRefresh() {
-  if (gRefreshTimer) clearTimeout(gRefreshTimer);
-  const delay = Math.max(gTokenExpiry - Date.now() - 5 * 60 * 1000, 30 * 1000);
-  gRefreshTimer = setTimeout(async () => {
-    try {
-      await ensureGoogleToken();
-      renderGoogleDriveSection();
-      scheduleGoogleTokenRefresh();
-    } catch (e) { /* silencieux : l'utilisateur devra taper sur "Se reconnecter" */ }
-  }, delay);
+  gTokenClient.requestAccessToken({ prompt: 'consent' });
 }
 
 function ensureGoogleToken() {
