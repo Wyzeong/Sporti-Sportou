@@ -1,6 +1,6 @@
 /* app.js — logique de l'appli, vanilla JS, aucune dépendance */
 
-const APP_VERSION = '0.13.2';
+const APP_VERSION = '0.14.0';
 
 const MOTIVATION_QUOTES = [
   "Encore une série, encore un pas.",
@@ -199,6 +199,7 @@ let audioCtx = null;
 let victoryBuffer = null;
 let victoryLoadStarted = false;
 let audioNeedsRebuild = false;
+let masterBus = null;
 
 // iOS coupe le contexte audio quand une autre appli passe au premier plan, et un
 // simple resume() ne suffit pas toujours à le relancer (il peut rester "actif"
@@ -214,6 +215,7 @@ function ensureAudio() {
     audioNeedsRebuild = false;
     try { if (audioCtx) audioCtx.close(); } catch (e) { /* ignore */ }
     audioCtx = null;
+    masterBus = null;
     victoryBuffer = null;
     victoryLoadStarted = false;
   }
@@ -222,12 +224,24 @@ function ensureAudio() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
 
+    if (!masterBus) {
+      // limiteur en sortie : permet de pousser le volume bien plus fort sans
+      // que le son ne sature ou ne craque, utile pour sortir par-dessus de la musique
+      masterBus = audioCtx.createDynamicsCompressor();
+      masterBus.threshold.setValueAtTime(-10, audioCtx.currentTime);
+      masterBus.knee.setValueAtTime(6, audioCtx.currentTime);
+      masterBus.ratio.setValueAtTime(12, audioCtx.currentTime);
+      masterBus.attack.setValueAtTime(0.002, audioCtx.currentTime);
+      masterBus.release.setValueAtTime(0.15, audioCtx.currentTime);
+      masterBus.connect(audioCtx.destination);
+    }
+
     // joue un buffer silencieux immédiatement : finalise le déblocage sur iOS,
     // qui exige un vrai départ de lecture pendant le geste utilisateur
     const silent = audioCtx.createBuffer(1, 1, 22050);
     const src = audioCtx.createBufferSource();
     src.buffer = silent;
-    src.connect(audioCtx.destination);
+    src.connect(masterBus);
     src.start(0);
   } catch (e) { /* audio indisponible, on ignore silencieusement */ }
 
@@ -245,28 +259,37 @@ function playVictoryFanfare() {
   if (!audioCtx || !victoryBuffer) return;
   try {
     const src = audioCtx.createBufferSource();
+    const boost = audioCtx.createGain();
+    boost.gain.setValueAtTime(1.8, audioCtx.currentTime); // fichier remonté, écrêtage géré par le limiteur
     src.buffer = victoryBuffer;
-    src.connect(audioCtx.destination);
+    src.connect(boost).connect(masterBus || audioCtx.destination);
     src.start(0);
   } catch (e) { /* ignore */ }
 }
 
-function beep(freq, duration, when = 0, volume = 0.5, type = 'square') {
+function beep(freq, duration, when = 0, volume = 0.9, type = 'square') {
   if (!audioCtx) return;
+  const bus = masterBus || audioCtx.destination;
   const t0 = audioCtx.currentTime + when;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, t0);
-  gain.gain.setValueAtTime(0, t0);
-  gain.gain.linearRampToValueAtTime(volume, t0 + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
-  osc.connect(gain).connect(audioCtx.destination);
-  osc.start(t0);
-  osc.stop(t0 + duration + 0.02);
+
+  // deux fréquences superposées (fondamentale + octave au-dessus) : plus perçant,
+  // ressort mieux au-dessus d'une musique que jouerait l'utilisateur en même temps
+  [freq, freq * 2].forEach((f, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(f, t0);
+    const v = i === 0 ? volume : volume * 0.55;
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(v, t0 + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+    osc.connect(gain).connect(bus);
+    osc.start(t0);
+    osc.stop(t0 + duration + 0.02);
+  });
 }
-function playTick() { beep(1000, 0.12, 0, 0.7); }
-function playGo() { beep(700, 0.16, 0, 0.6); beep(1050, 0.28, 0.15, 0.65); }
+function playTick() { beep(1000, 0.14, 0, 1.0); }
+function playGo() { beep(700, 0.18, 0, 0.9); beep(1050, 0.32, 0.16, 1.0); }
 
 
 /* ===================== CALENDRIER ===================== */
