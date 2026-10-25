@@ -34,6 +34,13 @@
           <span class="sub">Démarrer une séance existante</span>
         </span>
       </button>
+      <button class="home-btn" data-nav="abdos">
+        <span class="glyph">⏱️</span>
+        <span>
+          <span class="label">Abdos</span>
+          <span class="sub">Séries chronométrées avec annonces</span>
+        </span>
+      </button>
       <button class="home-btn" data-nav="calendar">
         <span class="glyph">📅</span>
         <span>
@@ -92,6 +99,41 @@
       <h1>Séances</h1>
     </div>
     <div class="list" id="seances-list"></div>
+  </section>
+
+  <!-- ===================== ABDOS (configuration) ===================== -->
+  <section id="view-abdos" class="view">
+    <div class="topbar">
+      <button class="icon-btn back-link" data-nav="home">←</button>
+      <h1>Abdos</h1>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Séries par round</label>
+        <input type="number" id="abs-sets" inputmode="numeric" min="1">
+      </div>
+      <div class="field">
+        <label>Rounds</label>
+        <input type="number" id="abs-rounds" inputmode="numeric" min="1">
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Durée d'une série (s)</label>
+        <input type="number" id="abs-set-dur" inputmode="numeric" min="1">
+      </div>
+      <div class="field">
+        <label>Repos entre séries (s)</label>
+        <input type="number" id="abs-rest-dur" inputmode="numeric" min="0">
+      </div>
+    </div>
+    <div class="field">
+      <label class="check-row"><input type="checkbox" id="abs-voice"> Annonces vocales (sinon bips)</label>
+    </div>
+    <div class="abs-summary" id="abs-summary"></div>
+    <div class="detail-actions" style="margin-top:auto;">
+      <button class="btn primary" id="btn-abs-start">Démarrer</button>
+    </div>
   </section>
 
   <!-- ===================== PERFORMANCE ===================== -->
@@ -235,6 +277,20 @@
   <div class="rest-quote" id="rest-quote"></div>
   <button class="btn ghost" id="btn-skip-rest">Reprendre</button>
   <div class="wk-quit" id="btn-quit-workout-rest">Abandonner la séance</div>
+</div>
+
+<!-- Écran de chronomètre Abdos (plein écran, automatique) -->
+<div class="rest-screen" id="abs-screen" style="display:none;">
+  <span class="eyebrow" id="abs-phase-label">PRÉPARE-TOI</span>
+  <div class="rest-ring-wrap">
+    <svg width="220" height="220" viewBox="0 0 220 220">
+      <circle class="ring-bg" cx="110" cy="110" r="98"></circle>
+      <circle class="ring-fg" id="abs-ring-fg" cx="110" cy="110" r="98" style="transition:none;"></circle>
+    </svg>
+    <div class="rest-time" id="abs-time">5</div>
+  </div>
+  <div class="rest-next" id="abs-progress"></div>
+  <div class="wk-quit" id="btn-abs-quit">Arrêter</div>
 </div>
 
 <!-- Modale : choisir des séances à planifier sur une date -->

@@ -1,6 +1,6 @@
 /* app.js — logique de l'appli, vanilla JS, aucune dépendance */
 
-const APP_VERSION = '0.14.1';
+const APP_VERSION = '0.16.0';
 
 const MOTIVATION_QUOTES = [
   "Encore une série, encore un pas.",
@@ -134,6 +134,7 @@ document.addEventListener('click', (e) => {
     if (target === 'seances') { renderSeancesList(); }
     if (target === 'parametres') { renderParametresList(); renderGoogleDriveSection(); }
     if (target === 'performance') { renderPerformance(); }
+    if (target === 'abdos') { renderAbdosConfig(); }
     showView(target);
   }
 });
@@ -199,8 +200,6 @@ let audioCtx = null;
 let victoryBuffer = null;
 let victoryLoadStarted = false;
 let audioNeedsRebuild = false;
-let masterBus = null;
-let makeupGain = null;
 
 // iOS coupe le contexte audio quand une autre appli passe au premier plan, et un
 // simple resume() ne suffit pas toujours à le relancer (il peut rester "actif"
@@ -216,8 +215,6 @@ function ensureAudio() {
     audioNeedsRebuild = false;
     try { if (audioCtx) audioCtx.close(); } catch (e) { /* ignore */ }
     audioCtx = null;
-    masterBus = null;
-    makeupGain = null;
     victoryBuffer = null;
     victoryLoadStarted = false;
   }
@@ -226,29 +223,12 @@ function ensureAudio() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
 
-    if (!masterBus) {
-      // limiteur serré + gain de rattrapage après : un compresseur seul n'augmente
-      // pas le volume, il écrase juste les pics. C'est le gain après qui rend le
-      // son réellement plus fort, sans faire saturer/craquer la sortie.
-      masterBus = audioCtx.createDynamicsCompressor();
-      masterBus.threshold.setValueAtTime(-32, audioCtx.currentTime);
-      masterBus.knee.setValueAtTime(6, audioCtx.currentTime);
-      masterBus.ratio.setValueAtTime(20, audioCtx.currentTime);
-      masterBus.attack.setValueAtTime(0.001, audioCtx.currentTime);
-      masterBus.release.setValueAtTime(0.1, audioCtx.currentTime);
-
-      makeupGain = audioCtx.createGain();
-      makeupGain.gain.setValueAtTime(5, audioCtx.currentTime); // gain de rattrapage après limitation
-
-      masterBus.connect(makeupGain).connect(audioCtx.destination);
-    }
-
     // joue un buffer silencieux immédiatement : finalise le déblocage sur iOS,
     // qui exige un vrai départ de lecture pendant le geste utilisateur
     const silent = audioCtx.createBuffer(1, 1, 22050);
     const src = audioCtx.createBufferSource();
     src.buffer = silent;
-    src.connect(masterBus);
+    src.connect(audioCtx.destination);
     src.start(0);
   } catch (e) { /* audio indisponible, on ignore silencieusement */ }
 
@@ -267,20 +247,20 @@ function playVictoryFanfare() {
   try {
     const src = audioCtx.createBufferSource();
     const boost = audioCtx.createGain();
-    boost.gain.setValueAtTime(2, audioCtx.currentTime); // fichier remonté, la limitation gère l'écrêtage
+    boost.gain.setValueAtTime(3, audioCtx.currentTime); // volume poussé bien au-delà de l'original, léger écrêtage volontaire
     src.buffer = victoryBuffer;
-    src.connect(boost).connect(masterBus || audioCtx.destination);
+    src.connect(boost).connect(audioCtx.destination);
     src.start(0);
   } catch (e) { /* ignore */ }
 }
 
-function beep(freq, duration, when = 0, volume = 1.4, type = 'sawtooth') {
+function beep(freq, duration, when = 0, volume = 2.5, type = 'sawtooth') {
   if (!audioCtx) return;
-  const bus = masterBus || audioCtx.destination;
   const t0 = audioCtx.currentTime + when;
 
-  // trois fréquences superposées (fondamentale + octave + quinte au-dessus) : plus
-  // perçant et plus dense, ressort mieux au-dessus d'une musique jouée en même temps
+  // trois fréquences superposées (fondamentale + octave + quinte au-dessus) et un
+  // gain bien au-delà de l'unité : ça écrête volontairement (façon buzzer/alarme),
+  // ce qui le rend beaucoup plus fort et perçant qu'un son "propre"
   [freq, freq * 1.5, freq * 2].forEach((f, i) => {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
@@ -290,13 +270,13 @@ function beep(freq, duration, when = 0, volume = 1.4, type = 'sawtooth') {
     gain.gain.setValueAtTime(0, t0);
     gain.gain.linearRampToValueAtTime(v, t0 + 0.008);
     gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
-    osc.connect(gain).connect(bus);
+    osc.connect(gain).connect(audioCtx.destination);
     osc.start(t0);
     osc.stop(t0 + duration + 0.02);
   });
 }
-function playTick() { beep(1000, 0.14, 0, 1.4); }
-function playGo() { beep(700, 0.18, 0, 1.3); beep(1050, 0.32, 0.16, 1.4); }
+function playTick() { beep(1000, 0.15, 0, 2.5); }
+function playGo() { beep(700, 0.2, 0, 2.2); beep(1050, 0.34, 0.17, 2.5); }
 
 
 /* ===================== CALENDRIER ===================== */
@@ -615,6 +595,9 @@ function renderExercisesList() {
   wrap.innerHTML = t.exercises.map((ex, i) => `
     <div class="exercise-card" data-idx="${i}">
       <div class="row-top">
+        <div class="ex-pos">
+          <input type="number" inputmode="numeric" min="1" max="${t.exercises.length}" data-field="pos" value="${i + 1}"> / ${t.exercises.length}
+        </div>
         <input class="ex-name" data-field="name" value="${escapeHtml(ex.name)}" placeholder="Nom de l'exercice">
         <button class="remove-ex" data-remove="${i}">×</button>
       </div>
@@ -643,6 +626,18 @@ function renderExercisesList() {
     const ex = t.exercises[idx];
 
     $(`[data-field="name"]`, card).addEventListener('input', (e) => { ex.name = e.target.value; });
+
+    // changement d'ordre : on valide à la fin de la saisie ('change') pour ne pas
+    // re-générer la liste à chaque chiffre tapé (ce qui fermerait le clavier)
+    $(`[data-field="pos"]`, card).addEventListener('change', (e) => {
+      const n = t.exercises.length;
+      const target = Math.min(n, Math.max(1, parseInt(e.target.value, 10) || (idx + 1))) - 1;
+      if (target !== idx) {
+        const [moved] = t.exercises.splice(idx, 1);
+        t.exercises.splice(target, 0, moved);
+      }
+      renderExercisesList();
+    });
 
     $(`[data-field="count"]`, card).addEventListener('change', (e) => {
       let n = Math.max(1, Number(e.target.value) || 1);
@@ -1274,3 +1269,235 @@ $('#btn-google-connect').addEventListener('click', connectGoogleDrive);
 $('#btn-drive-export').addEventListener('click', driveExport);
 $('#btn-drive-import').addEventListener('click', openDriveImportPicker);
 $('#btn-drive-disconnect').addEventListener('click', disconnectGoogleDrive);
+
+/* ===================== ABDOS (séries chronométrées) ===================== */
+// Enchaîne automatiquement : préparation -> [série -> repos] x N, avec annonces
+// "3-2-1-repos" en fin de série et "3-2-1-go" en fin de repos.
+// Le temps est calculé à partir d'horodatages (et non en comptant les ticks),
+// donc il reste juste même si le navigateur ralentit le minuteur.
+const ABS_DEFAULTS = { sets: 4, rounds: 4, setDur: 20, restDur: 10, voice: true };
+const ABS_PREP_SECONDS = 5;
+const abs = {
+  cfg: null, phases: [], idx: 0,
+  phaseStart: 0, phaseEnd: 0, phaseTotal: 0,
+  timer: null, lastAnnounced: null, wakeLock: null,
+};
+
+function readAbsForm() {
+  const int = (id, min, def) => {
+    const n = parseInt($(id).value, 10);
+    return Number.isNaN(n) ? def : Math.max(min, n);
+  };
+  return {
+    sets: int('#abs-sets', 1, ABS_DEFAULTS.sets),
+    rounds: int('#abs-rounds', 1, ABS_DEFAULTS.rounds),
+    setDur: int('#abs-set-dur', 1, ABS_DEFAULTS.setDur),
+    restDur: int('#abs-rest-dur', 0, ABS_DEFAULTS.restDur),
+    voice: $('#abs-voice').checked,
+  };
+}
+
+function fmtDuration(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function renderAbsSummary() {
+  const c = readAbsForm();
+  const total = c.sets * c.rounds;
+  const seconds = total * c.setDur + (total - 1) * c.restDur;
+  $('#abs-summary').innerHTML =
+    `<b>${total} séries</b> au total (${c.rounds} round${c.rounds > 1 ? 's' : ''} × ${c.sets} série${c.sets > 1 ? 's' : ''})<br>` +
+    `Durée de l'entraînement : <b>${fmtDuration(seconds)}</b>`;
+}
+
+async function renderAbdosConfig() {
+  const saved = await DB.getKV('absConfig');
+  const c = Object.assign({}, ABS_DEFAULTS, saved || {});
+  $('#abs-sets').value = c.sets;
+  $('#abs-rounds').value = c.rounds;
+  $('#abs-set-dur').value = c.setDur;
+  $('#abs-rest-dur').value = c.restDur;
+  $('#abs-voice').checked = !!c.voice;
+  renderAbsSummary();
+}
+
+['#abs-sets', '#abs-rounds', '#abs-set-dur', '#abs-rest-dur'].forEach(sel => {
+  $(sel).addEventListener('input', renderAbsSummary);
+  $(sel).addEventListener('change', async () => {
+    const c = readAbsForm();
+    $('#abs-sets').value = c.sets;
+    $('#abs-rounds').value = c.rounds;
+    $('#abs-set-dur').value = c.setDur;
+    $('#abs-rest-dur').value = c.restDur;
+    await DB.setKV('absConfig', c);
+    renderAbsSummary();
+  });
+});
+$('#abs-voice').addEventListener('change', () => DB.setKV('absConfig', readAbsForm()));
+
+/* ---- annonces : voix (synthèse vocale) ou bips ---- */
+const ABS_WORDS = { '3': 'trois', '2': 'deux', '1': 'un', 'repos': 'repos', 'go': 'go' };
+
+function playRest() { beep(800, 0.2, 0, 2.2); beep(500, 0.34, 0.17, 2.5); } // son descendant = repos
+
+function absSpeak(word) {
+  const u = new SpeechSynthesisUtterance(ABS_WORDS[word] || word);
+  u.lang = 'fr-FR';
+  u.rate = 1.2;
+  u.volume = 1;
+  const fr = (speechSynthesis.getVoices() || []).find(v => v.lang && v.lang.toLowerCase().startsWith('fr'));
+  if (fr) u.voice = fr;
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+}
+
+function absAnnounce(word) {
+  if (abs.cfg.voice && 'speechSynthesis' in window) {
+    try { absSpeak(word); return; } catch (e) { /* on retombe sur les bips */ }
+  }
+  if (word === 'repos') playRest();
+  else if (word === 'go') playGo();
+  else playTick();
+}
+
+function absPrimeSpeech() {
+  // iOS exige un premier appel dans un geste utilisateur pour autoriser la voix ensuite
+  try {
+    if ('speechSynthesis' in window) {
+      const u = new SpeechSynthesisUtterance(' ');
+      u.volume = 0;
+      speechSynthesis.speak(u);
+    }
+  } catch (e) { /* ignore */ }
+}
+
+/* ---- écran allumé pendant l'entraînement (si le navigateur le permet) ---- */
+async function absRequestWakeLock() {
+  try { if ('wakeLock' in navigator) abs.wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { /* ignore */ }
+}
+function absReleaseWakeLock() {
+  try { if (abs.wakeLock) { abs.wakeLock.release(); abs.wakeLock = null; } } catch (e) { /* ignore */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && abs.timer) absRequestWakeLock();
+});
+
+/* ---- déroulé ---- */
+function startAbdos() {
+  ensureAudio();
+  absPrimeSpeech();
+
+  const cfg = readAbsForm();
+  DB.setKV('absConfig', cfg);
+  abs.cfg = cfg;
+
+  const total = cfg.sets * cfg.rounds;
+  const phases = [{ type: 'prep', dur: ABS_PREP_SECONDS, total }];
+  for (let i = 0; i < total; i++) {
+    phases.push({
+      type: 'work', dur: cfg.setDur, n: i + 1, total,
+      round: Math.floor(i / cfg.sets) + 1,
+    });
+    if (i < total - 1 && cfg.restDur > 0) phases.push({ type: 'rest', dur: cfg.restDur, next: i + 2, total });
+  }
+  abs.phases = phases;
+
+  $('#abs-screen').style.display = 'flex';
+  absRequestWakeLock();
+  absEnterPhase(0);
+  abs.timer = setInterval(absTick, 200);
+}
+
+function absEnterPhase(i) {
+  const p = abs.phases[i];
+  abs.idx = i;
+  abs.phaseStart = Date.now();
+  abs.phaseTotal = p.dur * 1000;
+  abs.phaseEnd = abs.phaseStart + abs.phaseTotal;
+  abs.lastAnnounced = null;
+
+  const ring = $('#abs-ring-fg');
+  if (p.type === 'work') {
+    $('#abs-phase-label').textContent = 'SÉRIE';
+    $('#abs-progress').textContent = `Série ${p.n}/${p.total} · Round ${p.round}/${abs.cfg.rounds}`;
+    ring.style.stroke = 'var(--accent)';
+  } else if (p.type === 'rest') {
+    $('#abs-phase-label').textContent = 'REPOS';
+    $('#abs-progress').textContent = `Ensuite : série ${p.next}/${p.total}`;
+    ring.style.stroke = 'var(--rest)';
+  } else {
+    $('#abs-phase-label').textContent = 'PRÉPARE-TOI';
+    $('#abs-progress').textContent = `${p.total} séries à venir`;
+    ring.style.stroke = 'var(--text-muted)';
+  }
+  absRender(p.dur, abs.phaseTotal);
+}
+
+function absRender(secLeft, msLeft) {
+  $('#abs-time').textContent = secLeft;
+  const ring = $('#abs-ring-fg');
+  ring.style.strokeDasharray = `${RING_CIRC}`;
+  const ratio = abs.phaseTotal > 0 ? Math.max(0, msLeft) / abs.phaseTotal : 0;
+  ring.style.strokeDashoffset = `${RING_CIRC * (1 - ratio)}`;
+}
+
+function absTick() {
+  const p = abs.phases[abs.idx];
+  if (!p) return;
+  const msLeft = abs.phaseEnd - Date.now();
+  const secLeft = Math.max(0, Math.ceil(msLeft / 1000));
+  absRender(secLeft, msLeft);
+
+  // "3, 2, 1" (pas dans les premières 400 ms, pour ne pas couvrir le "go" / "repos" précédent)
+  if (secLeft >= 1 && secLeft <= 3 && abs.lastAnnounced !== secLeft && Date.now() - abs.phaseStart > 400) {
+    abs.lastAnnounced = secLeft;
+    absAnnounce(String(secLeft));
+  }
+
+  if (msLeft <= 0) {
+    const next = abs.phases[abs.idx + 1];
+    if (!next) { finishAbdos(); return; }
+    absAnnounce(next.type === 'rest' ? 'repos' : 'go');
+    absEnterPhase(abs.idx + 1);
+  }
+}
+
+function stopAbdos() {
+  if (abs.timer) { clearInterval(abs.timer); abs.timer = null; }
+  $('#abs-screen').style.display = 'none';
+  absReleaseWakeLock();
+  try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+}
+
+const ABS_CALENDAR = { color: '#f2a93b', icon: '⏱️' };
+
+async function finishAbdos() {
+  const total = abs.cfg.sets * abs.cfg.rounds;
+  stopAbdos();
+  playVictoryFanfare();
+  toast('Abdos terminés 💪');
+  showView('home');
+
+  // ajout au calendrier (même mécanisme que les séances : couleur + icône propres)
+  try {
+    await DB.savePlanned({
+      id: uid(),
+      date: dateKey(new Date()),
+      templateId: 'abdos',
+      templateName: `Abdos · ${total} séries`,
+      color: ABS_CALENDAR.color,
+      icon: ABS_CALENDAR.icon,
+      done: true,
+    });
+  } catch (e) { /* l'entraînement est terminé, un échec d'écriture ne doit rien bloquer */ }
+}
+
+$('#btn-abs-start').addEventListener('click', startAbdos);
+$('#btn-abs-quit').addEventListener('click', () => {
+  if (!confirm('Arrêter les abdos ?')) return;
+  stopAbdos();
+  renderAbdosConfig();
+  showView('abdos');
+});
